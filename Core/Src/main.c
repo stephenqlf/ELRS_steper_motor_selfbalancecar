@@ -58,14 +58,14 @@ long Remoter_Ch1 = 1500, Remoter_Ch2 = 1500, Arm_ch6 = 1500;
 
 
 
-float Balance_Kp = 500, Balance_Kd =- 0.12, Velocity_Kp =2,Velocity_Ki=0.5; //PID????Balance_Kp=1500,Balance_Kd=-0.8,Velocity_Kp=20,,Velocity_Ki=Velocity_Kp/200, 500,-1.25, 42  Balance_Kd = -0.37,
+float Balance_Kp = 600, Balance_Kd =- 0.12, Velocity_Kp =2,Velocity_Ki=0.5; //PID????Balance_Kp=1500,Balance_Kd=-0.8,Velocity_Kp=20,,Velocity_Ki=Velocity_Kp/200, 500,-1.25, 42  Balance_Kd = -0.37,
 int Target_Velocity = 5000; // 默认速度快慢
 
 
 float Zhongzhi = -0.55f;
 
 
-int Flag_Zhongzhi = 0;
+
 int Balance_Pwm, Velocity_Pwm, Turn_Pwm;
 int MPU_Flag;
 void	testrun(void);

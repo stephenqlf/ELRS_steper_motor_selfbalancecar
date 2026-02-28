@@ -28,7 +28,7 @@ extern u8 Flag_Qian, Flag_Hou, Flag_Left, Flag_Right, Flag_sudu; // 蓝牙遥控相关
 extern int Moto1, Moto2, Final_Moto1, Final_Moto2;               // 电机PWM变量 应是Motor的 向Moto致敬
 extern int Target_Velocity;
 extern u8 Flag_Qian, Flag_Hou, Flag_Left, Flag_Right;            // 蓝牙遥控相关的变量                //停止标志位和 显示标志位 默认停止 显示打开
-extern float Zhongzhi, Flag_Zhongzhi;
+
 extern float Acceleration_Z; // Z轴加速度计
 extern int _channels[];
 extern int MPU_Flag;
@@ -39,6 +39,16 @@ float xpeed = 0.0;
 const float Math_PI = 3.1415926;
 int DMP_Ready_Flag = 0;
 extern u8 mpu_dmp_flag;
+
+
+extern float Zhongzhi ;
+u8 Flag_Zhongzhi = 0; // 0: 未校准，1: 已校准
+
+// 自动找中值专用变量
+float AutoZero_SumAngle = 0.0f;
+int AutoZero_Count = 0;
+u8 AutoZero_InProgress = 0; 
+
 
 //************MPU6050相关数据读取********************
 void MPU6050_Data_read(void)
@@ -603,7 +613,7 @@ void ControlLoopPackage()
     }
 
     // else  printf("Zhongzhi is %f \r\n", Zhongzhi);
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); //最后翻转PC13LED灯
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); //最后翻转PC13LED灯，示波器可以从led引脚翻转频率看是否能保证1000hz的pid控制
 }
 
 /**************************************************************************
@@ -684,29 +694,65 @@ void Xianfu_Pwm(int lastMoto1, int lastMoto2)
 }
 
 /**************************************************************************
-函数功能：自适应中值
+函数功能：自适应中值 (改进版：允许小幅摆动中校准)
 入口参数：无
 返回  值：无
 **************************************************************************/
 void Get_Zhongzhi(void)
 {
-    static int count;
+    // 如果已经校准过，直接退出 (除非你想做实时动态校准，否则校准一次即可)
+    if (Flag_Zhongzhi == 1) return;
 
-    if (myabs(Moto1) < 100 && myabs(Moto2) < 100)
-        count++; // 采样
-    else
-        count = 0;
-
-    if (count > 300) // 连线3秒处于平衡位置，读取中值
+    // 安全检测：如果车快倒了 (角度过大)，重置采样
+    if (fabs(roll) > 15.0f) 
     {
-        Zhongzhi = -roll;
-        Flag_Zhongzhi = 1;
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET); //中值找到，则亮中值找到指标灯
-        printf("Zhongzhi is %f \r\n", Zhongzhi);
+        AutoZero_SumAngle = 0;
+        AutoZero_Count = 0;
+        AutoZero_InProgress = 0;
+        return;
+    }
+
+    // 启动条件：
+    // 1. 电机已使能 (Flag_Stop == 0)
+    // 2. 角度在合理范围内 (-10度 到 10度)
+    // 3. 已经运行了一小段时间 (避免上电瞬间的瞬态干扰)，比如进入控制循环 100 次后
+    static int start_delay = 0;
+    if (Flag_Stop == 0) start_delay++;
+    
+    if (start_delay > 100 && fabs(roll) < 10.0f) 
+    {
+        AutoZero_InProgress = 1;
+    }
+
+    // 执行采样
+    if (AutoZero_InProgress == 1)
+    {
+        AutoZero_SumAngle += (-roll); // 累加当前角度 (注意符号，你的 balance 函数用的是 -roll)
+        AutoZero_Count++;
+
+        // 采样足够次数 (假设 1kHz 中断，采样 2000 次 = 2 秒)
+        // 2 秒内车会左右晃动几个周期，平均值即为机械中值
+        if (AutoZero_Count >= 10000) 
+        {
+            // 计算平均值
+            float new_zhongzhi = AutoZero_SumAngle / AutoZero_Count;
+            
+            // 【关键】平滑过渡：不要直接赋值，防止突变导致摔倒
+            // 如果新旧值差别不大，直接更新；如果差别大，分步更新或直接更新但配合低速启动
+            Zhongzhi = new_zhongzhi;
+            Flag_Zhongzhi = 1; // 标记校准完成
+            
+            // 提示用户
+            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14,GPIO_PIN_SET); // 亮红灯表示中值已经找到
+            printf("Zhongzhi Auto-Calibrated: %f (Samples: %d)\r\n", Zhongzhi, AutoZero_Count);
+            
+            // 重置采样状态
+            AutoZero_SumAngle = 0;
+            AutoZero_Count = 0;
+            AutoZero_InProgress = 0;
+        }
     }
 }
-
-
 
 /**************************************************************************
 函数功能：所有的控制代码都在这里面

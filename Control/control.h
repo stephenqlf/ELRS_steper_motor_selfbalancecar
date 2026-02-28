@@ -9,7 +9,12 @@
 #define PI 3.14159265
 #define FILTERING_TIMES  10
 #define KEY PBin(4)
-
+extern float Zhongzhi;
+extern u8 Flag_Zhongzhi;
+// 新增用于自动找中值的变量
+extern float AutoZero_SumAngle;   // 角度累加和
+extern int AutoZero_Count;        // 采样计数
+extern u8 AutoZero_InProgress;    // 是否正在采样中
 u8 click_N_Double (u8 time);  //单击按键扫描和双击按键扫描
 u8 click(void);               //单击按键扫描
 u8 Long_Press(void);           //长按扫描  
