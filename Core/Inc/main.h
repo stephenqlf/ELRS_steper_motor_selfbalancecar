@@ -58,6 +58,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define Zhongzhi_Pin GPIO_PIN_14
+#define Zhongzhi_GPIO_Port GPIOC
 #define LED_Pin GPIO_PIN_13
 #define LED_GPIO_Port GPIOC
 #define CurrentAdjust_Pin GPIO_PIN_1

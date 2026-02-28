@@ -52,6 +52,7 @@ void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+   HAL_GPIO_WritePin(LED_GPIO_Port, Zhongzhi_Pin, GPIO_PIN_RESET); //显示是否找到中值
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, CurrentAdjust_Pin|LDIR_Pin|RDIR_Pin, GPIO_PIN_RESET);
@@ -82,6 +83,13 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(MPU_INT_GPIO_Port, &GPIO_InitStruct);
+  
+      /*Configure GPIO pin : PtPin */
+  GPIO_InitStruct.Pin = Zhongzhi_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(Zhongzhi_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PBPin PBPin PBPin PBPin
                            PBPin */

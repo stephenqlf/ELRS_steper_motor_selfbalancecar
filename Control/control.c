@@ -701,7 +701,7 @@ void Get_Zhongzhi(void)
     {
         Zhongzhi = -roll;
         Flag_Zhongzhi = 1;
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET); //中值找到，则亮中值找到指标灯
         printf("Zhongzhi is %f \r\n", Zhongzhi);
     }
 }
