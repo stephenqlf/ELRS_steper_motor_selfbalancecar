@@ -1,0 +1,15 @@
+*.uvguix.*
+*.uvoptx
+*.uvprojx.user
+*.bak
+*.log
+*.map
+*.lst
+*.crf
+*.o
+*.d
+Objects/
+Listings/
+List/
+RTE/
+.DS_Store
