@@ -166,51 +166,128 @@ int balance(float Angle, float Gyro)
     return balanceValue;
 }
 
-/**************************************************************************
-函数功能：速度PI控制 修改前进后退速度，请修Target_Velocity
-入口参数：左轮速度、右轮速度
-返回  值：速度控制PWM
 
+	 /**************************************************************************
+函数功能：速度PI控制 (改进版：软启动 + 积分抗静摩擦 + 噪声滤波)
+入口参数：左轮速度、右轮速度 (实际未直接使用，用于兼容接口)
+返回  值：速度控制PWM
 **************************************************************************/
 int velocity(int velocity_left, int velocity_right)
 {
-    static float SpeedError_Least = 0, SpeedError_Integral = 0, SpeedError = 0, Movement;
-    static int Velocity;
+    // --- 1. 静态变量定义 ---
+    static float SpeedError_Integral = 0;       // 积分项
+    static float Estimated_Speed = 0;           // 估算的实际速度
+    static float Smooth_Target_Velocity = 0;    // 平滑后的目标速度 (软启动用)
+    static float Last_Velocity_Output = 0;      // 上一轮速度环输出
     
+    // --- 2. 参数配置区 (根据实际效果微调这里) ---
+    const float Kp = -0.3f;         // 比例系数：负值！绝对值小一点保稳定 (0.2 ~ 0.4)
+    const float Ki = -0.08f;        // 积分系数：负值！负责克服静摩擦 (0.05 ~ 0.15)
+    const float Ramp_Step = 40.0f;  // 软启动步长：越大起步越猛，越小越平滑 (20 ~ 60)
+    const float Integral_Limit = 8000.0f; // 积分限幅：防止积分过大导致失控
+    const float Dead_Zone = 50.0f;  // 死区：目标速度小于此值视为停止
 
-    if (1 == Flag_Qian)
-        Movement = Target_Velocity; //===前进标志位置1
-    else if (1 == Flag_Hou)
-        Movement = -Target_Velocity; //===后退标志位置1
+    float Raw_Target = 0;
+    float Velocity_Output = 0;
+
+    // --- 3. 获取原始目标速度 ---
+    if (Flag_Qian)
+        Raw_Target = (float)Target_Velocity;
+    else if (Flag_Hou)
+        Raw_Target = -(float)Target_Velocity;
     else
-        Movement = 0;
+        Raw_Target = 0;
 
-    // printf("%f\r\n",Movement);
-    if (ZeroRequirementSpeedPid == 1)  //这里有问题，几个地方有Turn_off
+    // --- 4. 软启动逻辑 (斜坡函数) ---
+    // 让 Smooth_Target 慢慢接近 Raw_Target，避免突变
+    if (Raw_Target > Smooth_Target_Velocity)
     {
-        SpeedError = 0;
-        SpeedError_Integral = 0; //===电机关闭后清除积分
-        ZeroRequirementSpeedPid = 0;
-        // printf("%d\r\n",Velocity);
+        Smooth_Target_Velocity += Ramp_Step;
+        if (Smooth_Target_Velocity > Raw_Target) Smooth_Target_Velocity = Raw_Target;
+    }
+    else if (Raw_Target < Smooth_Target_Velocity)
+    {
+        Smooth_Target_Velocity -= Ramp_Step;
+        if (Smooth_Target_Velocity < Raw_Target) Smooth_Target_Velocity = Raw_Target;
     }
 
-    //=============速度PI控制器=======================//
-    SpeedError_Least = Mean_Filter(velocity_left,velocity_right) ; // 上一个循环的速度滤波 , 此处究竟是加上Movement 还是减去Movement 应该与正负极性有关，须在验证极性后再来确定，与Kp, Ki值一样需要验证极性Mean_Filter(velocity_left, velocity_right) - Movement;
+    // --- 5. 死区处理 (停车时彻底清零) ---
+    if (fabsf(Smooth_Target_Velocity) < Dead_Zone && fabsf(Raw_Target) < Dead_Zone)
+    {
+        Smooth_Target_Velocity = 0;
+        SpeedError_Integral = 0;      // 停车清除积分，防止累积
+        Estimated_Speed = 0;
+        Last_Velocity_Output = 0;
+        return 0; // 直接返回0，让车停稳
+    }
 
-    SpeedError *= 0.7f;                 //===一阶低通滤波器
-    SpeedError += SpeedError_Least * 0.3f; //===一阶低通滤波器
+    // --- 6. 估算实际速度 (简化模型) ---
+    // 开环步进电机没有编码器，我们用“上一轮输出”经过低通滤波来模拟实际速度
+    // 这比使用 Moto1+Moto2 更干净，因为 Moto 里包含直立环的高频抖动
+    Estimated_Speed = Estimated_Speed * 0.92f + Last_Velocity_Output * 0.08f;
+
+    // --- 7. 计算误差 ---
+    float SpeedError = Smooth_Target_Velocity - Estimated_Speed;
+
+    // --- 8. 积分运算 ---
+    SpeedError_Integral += SpeedError;
+
+    // 积分限幅 (非常重要，防止累积过大)
+    if (SpeedError_Integral > Integral_Limit) SpeedError_Integral = Integral_Limit;
+    if (SpeedError_Integral < -Integral_Limit) SpeedError_Integral = -Integral_Limit;
+
+    // --- 9. 计算最终输出 (P + I) ---
+    // 注意：Kp 和 Ki 都是负数，实现“想前进先退轮”的平衡车逻辑
+    Velocity_Output = (SpeedError * Kp) + (SpeedError_Integral * Ki);
+
+    // 保存当前输出供下一轮估算使用
+    Last_Velocity_Output = Velocity_Output;
+
+    return (int)Velocity_Output;
+
+	
+	
+	
+	
+	
+/*原来的方式*/
+//    static float SpeedError_Least = 0, SpeedError_Integral = 0, SpeedError = 0, Movement;
+//    static int Velocity;
+//    
+
+//    if (1 == Flag_Qian)
+//        Movement = Target_Velocity; //===前进标志位置1
+//    else if (1 == Flag_Hou)
+//        Movement = -Target_Velocity; //===后退标志位置1
+//    else
+//        Movement = 0;
+
+//    // printf("%f\r\n",Movement);
+//    if (ZeroRequirementSpeedPid == 1)  //这里有问题，几个地方有Turn_off
+//    {
+//        SpeedError = 0;
+//        SpeedError_Integral = 0; //===电机关闭后清除积分
+//        ZeroRequirementSpeedPid = 0;
+//        // printf("%d\r\n",Velocity);
+//    }
+
+//    //=============速度PI控制器=======================//
+//    SpeedError_Least = Mean_Filter(velocity_left,velocity_right) ; // 上一个循环的速度滤波 , 此处究竟是加上Movement 还是减去Movement 应该与正负极性有关，须在验证极性后再来确定，与Kp, Ki值一样需要验证极性Mean_Filter(velocity_left, velocity_right) - Movement;
+
+//    SpeedError *= 0.7f;                 //===一阶低通滤波器
+//    SpeedError += SpeedError_Least * 0.3f; //===一阶低通滤波器
 
 
-    SpeedError_Integral += SpeedError;     //===积分出位移
-    SpeedError_Integral += Movement;    //===接收遥控器数据，控制前进后退
-    if (SpeedError_Integral > 320000) //
-        SpeedError_Integral = 320000; //===积分限幅，输出限幅在8000左右，怎么积分限幅可以这么大？？？？
-    if (SpeedError_Integral < -320000)
-        SpeedError_Integral = -320000; //===积分限幅
+//    SpeedError_Integral += SpeedError;     //===积分出位移
+//    SpeedError_Integral += Movement;    //===接收遥控器数据，控制前进后退
+//    if (SpeedError_Integral > 320000) //
+//        SpeedError_Integral = 320000; //===积分限幅，输出限幅在8000左右，怎么积分限幅可以这么大？？？？
+//    if (SpeedError_Integral < -320000)
+//        SpeedError_Integral = -320000; //===积分限幅
 
-    Velocity = (int)(SpeedError * Velocity_Kp/100  + SpeedError_Integral * Velocity_Ki / 100 ); //===速度控制
+//    Velocity = (int)(SpeedError * Velocity_Kp/100  + SpeedError_Integral * Velocity_Ki / 100 ); //===速度控制
 
-    return Velocity;
+//    return Velocity;
 }
 
 /**************************************************************************
