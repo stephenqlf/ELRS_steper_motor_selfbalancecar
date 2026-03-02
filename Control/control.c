@@ -622,8 +622,24 @@ void ControlLoopPackage()
         Turn_Pwm = turn(Moto1, Moto2); //===速度环PI控制	 速度反馈是正反馈，就是小车快的时候要慢下来就需要再跑快一点
        // 		Moto1 = Balance_Pwm;
         //	Moto2 = Balance_Pwm;
-        Moto1 = Balance_Pwm + Velocity_Pwm - Turn_Pwm; //===计算左轮电机最终PWM  通过第一章的推导，输出方程可以将串级PID的算法转化成为：一个单独的负反馈的直立环 + 一个单独的正反馈的速度环。Moto1=Balance_Pwm-Velocity_Pwm-Turn_Pwm; 这里究竟应该是用加号还是减号？
+		 if(DMP_Ready_Flag == 1)
+		 {
+		 Moto1 = Balance_Pwm + Velocity_Pwm - Turn_Pwm; //===计算左轮电机最终PWM  通过第一章的推导，输出方程可以将串级PID的算法转化成为：一个单独的负反馈的直立环 + 一个单独的正反馈的速度环。Moto1=Balance_Pwm-Velocity_Pwm-Turn_Pwm; 这里究竟应该是用加号还是减号？
         Moto2 = Balance_Pwm + Velocity_Pwm + Turn_Pwm; //===计算右轮电机最终PWM 即脉冲/秒， 需要8000/s的脉冲频率才能达到2.5n/s, 150rpm
+		 
+		 
+		 }
+		 else
+		 {
+		 
+		 
+		 Moto1 = Balance_Pwm + Velocity_Pwm; //===计算左轮电机最终PWM  通过第一章的推导，输出方程可以将串级PID的算法转化成为：一个单独的负反馈的直立环 + 一个单独的正反馈的速度环。Moto1=Balance_Pwm-Velocity_Pwm-Turn_Pwm; 这里究竟应该是用加号还是减号？
+        Moto2 = Balance_Pwm + Velocity_Pwm; //===计算右轮电机最终PWM 即脉冲/秒， 需要8000/s的脉冲频率才能达到2.5n/s, 150rpm
+		 
+		 
+		 }
+//        Moto1 = Balance_Pwm + Velocity_Pwm - Turn_Pwm; //===计算左轮电机最终PWM  通过第一章的推导，输出方程可以将串级PID的算法转化成为：一个单独的负反馈的直立环 + 一个单独的正反馈的速度环。Moto1=Balance_Pwm-Velocity_Pwm-Turn_Pwm; 这里究竟应该是用加号还是减号？
+//        Moto2 = Balance_Pwm + Velocity_Pwm + Turn_Pwm; //===计算右轮电机最终PWM 即脉冲/秒， 需要8000/s的脉冲频率才能达到2.5n/s, 150rpm
 
         // printf("%d \r\n",Moto1);
 
