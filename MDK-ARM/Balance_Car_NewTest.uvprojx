@@ -561,11 +561,6 @@
               <FilePath>..\Control\control.c</FilePath>
             </File>
             <File>
-              <FileName>Readme.txt</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Readme.txt</FilePath>
-            </File>
-            <File>
               <FileName>control.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Control\control.h</FilePath>

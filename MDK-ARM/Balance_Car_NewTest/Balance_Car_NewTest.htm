@@ -3,7 +3,7 @@
 <title>Static Call Graph - [Balance_Car_NewTest\Balance_Car_NewTest.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image Balance_Car_NewTest\Balance_Car_NewTest.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060750: Last Updated: Mon Mar 02 11:07:55 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060750: Last Updated: Mon Mar 02 15:46:47 2026
 <BR><P>
 <H3>Maximum Stack Usage =        416 bytes + Unknown(Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -551,7 +551,7 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[3e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;USART6_IRQHandler
 </UL>
 
-<P><STRONG><a name="[66]"></a>ControlLoopPackage</STRONG> (Thumb, 260 bytes, Stack size 40 bytes, control.o(i.ControlLoopPackage))
+<P><STRONG><a name="[66]"></a>ControlLoopPackage</STRONG> (Thumb, 280 bytes, Stack size 40 bytes, control.o(i.ControlLoopPackage))
 <BR><BR>[Stack]<UL><LI>Max Depth = 392<LI>Call Chain = ControlLoopPackage &rArr; Get_Elrs &rArr; __hardfp_pow &rArr; __kernel_poly &rArr; __aeabi_dadd &rArr; _double_epilogue &rArr; _double_round
 </UL>
 <BR>[Calls]<UL><LI><a href="#[6b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_GPIO_WritePin
@@ -2102,8 +2102,7 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[ba]"></a>myabs</STRONG> (Thumb, 8 bytes, Stack size 0 bytes, control.o(i.myabs))
-<BR><BR>[Called By]<UL><LI><a href="#[6f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;turn
-<LI><a href="#[b9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Linear_Conversion
+<BR><BR>[Called By]<UL><LI><a href="#[b9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Linear_Conversion
 </UL>
 
 <P><STRONG><a name="[e8]"></a>sqrt</STRONG> (Thumb, 110 bytes, Stack size 32 bytes, sqrt.o(i.sqrt))
@@ -2116,12 +2115,8 @@ Global Symbols
 <LI><a href="#[e0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__hardfp_asin
 </UL>
 
-<P><STRONG><a name="[6f]"></a>turn</STRONG> (Thumb, 248 bytes, Stack size 12 bytes, control.o(i.turn))
-<BR><BR>[Stack]<UL><LI>Max Depth = 12<LI>Call Chain = turn
-</UL>
-<BR>[Calls]<UL><LI><a href="#[ba]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;myabs
-</UL>
-<BR>[Called By]<UL><LI><a href="#[66]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ControlLoopPackage
+<P><STRONG><a name="[6f]"></a>turn</STRONG> (Thumb, 108 bytes, Stack size 0 bytes, control.o(i.turn))
+<BR><BR>[Called By]<UL><LI><a href="#[66]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ControlLoopPackage
 </UL>
 
 <P><STRONG><a name="[6e]"></a>velocity</STRONG> (Thumb, 266 bytes, Stack size 0 bytes, control.o(i.velocity))
