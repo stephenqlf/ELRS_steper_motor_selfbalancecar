@@ -58,7 +58,7 @@ long Remoter_Ch1 = 1500, Remoter_Ch2 = 1500, Arm_ch6 = 1500;
 
 
 
-float Balance_Kp = 600, Balance_Kd =- 0.12, Velocity_Kp =-0.35,Velocity_Ki=-0.09; //PID????Balance_Kp=1500,Balance_Kd=-0.8,Velocity_Kp=20,,Velocity_Ki=Velocity_Kp/200, 500,-1.25, 42  Balance_Kd = -0.37,
+float Balance_Kp = 600, Balance_Kd =- 0.12, Velocity_Kp =-0.35,Velocity_Ki=-0.09; //Balance_Kd =- 0.12
 int Target_Velocity = 3000; // 默认速度快慢
 
 

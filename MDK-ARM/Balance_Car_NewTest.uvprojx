@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F411xE</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../CRSF;../Users;../MDK-ARM;../MOTOR;../Control;..\MPU&amp;DMP;..\MPU&amp;DMP\MPU_INT;..\MPU&amp;DMP\MPU6050;..\MPU&amp;DMP\MPU6050\eMPL</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../CRSF;../Users;../MDK-ARM;../MOTOR;../Control;..\MPU&amp;DMP;..\MPU&amp;DMP\MPU_INT;..\MPU&amp;DMP\MPU6050;..\MPU&amp;DMP\MPU6050\eMPL;..\filter</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -1664,6 +1664,21 @@
                   </Cads>
                 </FileArmAds>
               </FileOption>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>filter</GroupName>
+          <Files>
+            <File>
+              <FileName>filter.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\filter\filter.c</FilePath>
+            </File>
+            <File>
+              <FileName>filter.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\filter\filter.h</FilePath>
             </File>
           </Files>
         </Group>
