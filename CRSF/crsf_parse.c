@@ -107,7 +107,7 @@ uint8_t CRSF_ProcessIdleIRQ(void) {
 	  }
 }
 
-void CRSF_Debug(){
+void CRSF_Debug(void){
 	//[起始字节] [长度] [类型] [负载数据] [CRC校验]
 	//打印出来原始数据0xC8	0x17	0x16	[通道 1 数据]...[通道 16 数据]	CRC
 	//////////输出原始数据///////////

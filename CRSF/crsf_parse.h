@@ -34,6 +34,6 @@ extern CRSF_Packet CRSF_RX_packet;//数据解析后你想查看可以通过它
 void CRSF_Init(UART_HandleTypeDef *huart);//初始化串口RXDMA接收中断
 uint8_t CRSF_ProcessIdleIRQ(void);  //(在你的空闲中断里调用它)空闲中断处理
 
-void CRSF_Debug();//检查到底怎么个事
+void CRSF_Debug(void);//检查到底怎么个事
 
 #endif

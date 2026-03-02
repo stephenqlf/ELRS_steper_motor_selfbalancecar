@@ -291,37 +291,53 @@ int velocity(int velocity_left, int velocity_right)
 }
 
 /**************************************************************************
-函数功能：转向控制
-入口参数：无
-返回  值：转向控制PWM
-
+函数功能：转向控制 (重构版：比例型 + 平滑滤波，彻底解决抖动)
+入口参数：velocity_left, velocity_right (未直接使用，仅兼容接口)
+返回  值：转向控制PWM (左轮减去此值，右轮加上此值)
 **************************************************************************/
-int turn(int velocity_left, int velocity_right) // 转向控制
+int turn(int velocity_left, int velocity_right) 
 {
-    static float Turn_Amplitude = 500, Turn_Target, Turn_Convert = 0.3;
-    static float Turn_Count, Encoder_temp;
-    if(1 == Flag_Left || 1 == Flag_Right)                //这一部分主要是根据旋转前的速度调整速度的起始速度，增加小车的适应性
+    // --- 1. 静态变量 ---
+    static float Turn_Output_Smooth = 0; // 平滑后的最终输出
+    static float Turn_Target_Raw = 0;    // 原始目标值
+
+    // --- 2. 参数配置 (关键！) ---
+    // 转向增益：直接设定目标力矩大小。
+    // 建议范围：300 ~ 600。太小转不动，太大容易甩尾。
+    // 步进电机原地扭矩大，可以给稍大一点，比如 500。
+    const float TURN_GAIN = 500.0f;      
+    
+    // 滤波系数：决定转向的“柔和度”。
+    // 公式：新输出 = 旧输出 * (1-coef) + 目标 * coef
+    // coef 越小越平滑 (启动慢)，coef 越大越灵敏 (启动快)。
+    // 建议范围：0.05 ~ 0.15。原地转弯建议小一点 (0.08)，防止冲击。
+    const float FILTER_COEF = 0.08f;     
+
+    // --- 3. 获取原始目标 (比例型：按下即给固定值，不累加！) ---
+    if (Flag_Left)
     {
-        if(++Turn_Count == 1)
-            Encoder_temp = myabs(velocity_left + velocity_right);
-        Turn_Convert = 900 / Encoder_temp;
-        if(Turn_Convert < 2)Turn_Convert = 2;
-        if(Turn_Convert > 20)Turn_Convert = 20;
+        Turn_Target_Raw = -TURN_GAIN; // 左转：负值
+    }
+    else if (Flag_Right)
+    {
+        Turn_Target_Raw = TURN_GAIN;  // 右转：正值
     }
     else
     {
-        Turn_Convert = 6;
-        Turn_Count = 0;
-        Encoder_temp = 0;
+        Turn_Target_Raw = 0;          // 松手：目标归零
     }
-    if(1 == Flag_Left)	           Turn_Target += Turn_Convert;
-    else if(1 == Flag_Right)	     Turn_Target -= Turn_Convert;
-    else Turn_Target = 0;
-    if (Turn_Target > Turn_Amplitude)
-        Turn_Target = Turn_Amplitude; //===转向速度限幅
-    if (Turn_Target < -Turn_Amplitude)
-        Turn_Target = -Turn_Amplitude;
-    return Turn_Target;
+
+    // --- 4. 一阶低通滤波 (核心！解决松手跳变和启动冲击) ---
+    // 让 Turn_Output_Smooth 像斜坡一样慢慢接近 Turn_Target_Raw
+    Turn_Output_Smooth = Turn_Output_Smooth * (1.0f - FILTER_COEF) + Turn_Target_Raw * FILTER_COEF;
+
+    // --- 5. 死区处理 (当目标为 0 且输出很小时，强制归零，消除静差) ---
+    if (Turn_Target_Raw == 0 && fabsf(Turn_Output_Smooth) < 5.0f)
+    {
+        Turn_Output_Smooth = 0;
+    }
+
+    return (int)Turn_Output_Smooth;
 }
 
 /**************************************************************************
