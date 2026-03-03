@@ -2961,7 +2961,7 @@ u8 mpu_dmp_init(void)
 		res=mpu_set_sample_rate(DEFAULT_MPU_HZ);	//设置采样率
 		printf("mpu_set_sample_rate complete ......\r\n");
 		if(res)return 3; 
-		res=dmp_load_motion_driver_firmware();		//加载dmp固件
+		res=dmp_load_motion_driver_firmware();		//加载dmp固件,否则dmp处理器没有固件，不会运行，固件在dmp.h中
 		printf("dmp_load_motion_driver_firmware complete ......\r\n");
 		if(res)return 4; 
 		res=dmp_set_orientation(inv_orientation_matrix_to_scalar(gyro_orientation));//设置陀螺仪方向

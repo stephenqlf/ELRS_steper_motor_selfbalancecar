@@ -58,7 +58,7 @@ long Remoter_Ch1 = 1500, Remoter_Ch2 = 1500, Arm_ch6 = 1500;
 
 
 
-float Balance_Kp = 600, Balance_Kd =- 0.12, Velocity_Kp =-0.35,Velocity_Ki=-0.09; //Balance_Kd =- 0.12
+float Balance_Kp = 200, Balance_Kd =0, Velocity_Kp =-0.35,Velocity_Ki=-0.09; //Balance_Kd =- 0.12
 int Target_Velocity = 3000; // 默认速度快慢
 
 
@@ -142,6 +142,16 @@ int main(void)
     MX_TIM2_Init();
     /* USER CODE BEGIN 2 */
     delay_init(100); 
+	
+	 MPU6050_Init();					                           //初始化MPU6050,一定要放到中断之前初始化
+	  
+	  /*想要尝试1000hz的pid控制频率，只能使用mpu的基础功能，自已解算出倾角，下面的dmp初始化代码注释掉*/
+   // mpu_dmp_flag = mpu_dmp_init();                 //初始化MPU6050的DMP
+//    printf("MPU6050 DMP Initiate flag is %d \r\n", mpu_dmp_flag);	
+	
+	
+	
+	
     MX_NVIC_Init();
 
 
@@ -161,7 +171,7 @@ int main(void)
  
 
     //HAL_UART_Receive_DMA(&huart6, (uint8_t *)&receive_buff, 255);  
-    HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+    //HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
     //Test Motor Rotation
     //		Left_Direction=1;
     //		Right_Direction=1;
@@ -170,10 +180,8 @@ int main(void)
 //    HAL_UARTEx_ReceiveToIdle_DMA(&huart6, (uint8_t *)&receive_buff, 255);  
 //    __HAL_UART_ENABLE_IT(&huart6, UART_IT_IDLE); 
 	
-	  MPU6050_Init();					                           //初始化MPU6050
-    mpu_dmp_flag = mpu_dmp_init();                 //初始化MPU6050的DMP
-    printf("MPU6050 DMP Initiate flag is %d \r\n", mpu_dmp_flag);	
-
+	 
+   delay_ms(2000);
     /* USER CODE END 2 */
 
     /* Infinite loop */

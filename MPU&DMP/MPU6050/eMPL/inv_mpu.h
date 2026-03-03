@@ -29,7 +29,7 @@
 //DMP稳定时间为8秒左右
 #define CHECK_FLAG 1  
 //陀螺仪采样频率，单位Hz
-#define MPU_HZ 200
+#define MPU_HZ 1000
 
 
 

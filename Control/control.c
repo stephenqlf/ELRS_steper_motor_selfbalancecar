@@ -612,8 +612,8 @@ void ControlLoopPackage()
 //        //MPU6050_Data_read();	//获取陀螺仪数据	每5ms读取一次
 //        Get_Elrs(); //===读取航模遥控器的数据
 //        DMP_Ready_Flag = 0;
-
-
+//		
+//		
 //    }
 
     if ( click() == 1 )  //((Flag_Stop == 1) && (click() == 1) )
@@ -622,11 +622,9 @@ void ControlLoopPackage()
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET); //黄色把警灯熄灭
 
     }
+	/*start to read gyro data*/
 
-
-    if (Flag_Stop == 0)
-    {
-        static float dt = 0.001f; // 1ms = 0.001秒
+		static float dt = 0.0025f; // 1ms = 0.001秒
 
         // 1. 读取传感器数据 (假设你的读取函数已填充这些变量)
         // 确保读取的是最新的数据
@@ -634,6 +632,8 @@ void ControlLoopPackage()
         MPU_Get_Gyroscope(&gyrox, &gyroy, &gyroz); //更新陀螺仪数据
 
         MPU_Get_Accelerometer(&aacx, &aacy, &aacz); //更新加速度计数据
+	
+	//printf("%d,%d,%d,%d,%d,%d \r\n" ,gyrox,gyroy,gyroz,aacx,aacy,aacz);
 
         // 2. 解算角度
         MPU6050_Solve_Angle(aacx, aacy, aacz, gyrox, gyroy, gyroz, dt);
@@ -653,20 +653,26 @@ void ControlLoopPackage()
         // gyroz (或 Angle_Yaw 的变化率) 用于转向环
 
         // 示例：打印调试
-        printf("Pitch: %.2f, Roll: %.2f\n", Angle_Pitch, Angle_Roll);
-  Get_Elrs(); //===读取航模遥控器的数据
+        //printf("Pitch: %.2f, Roll: %.2f\r\n", Angle_Pitch, Angle_Roll);
+       
+	/*start to read remote controller data*/
+         Get_Elrs(); //===读取航模遥控器的数据
 
 
-        //printf("Gyro_y is %d \r\n", gyrox);
+    if (Flag_Stop == 0)
+    {
+      
+
+		
         Balance_Pwm = balance(-Angle_Roll, gyrox); //===平衡控制 balanceValue = (int)(Balance_Kp * Bias + Balance_Kd * Gyro); //===计算平衡控制的电机PWM
         Velocity_Pwm = velocity(Moto1, Moto2);
         Turn_Pwm = turn(Moto1, Moto2); //===速度环PI控制	 速度反馈是正反馈，就是小车快的时候要慢下来就需要再跑快一点
 
-        // 	Moto1 = Balance_Pwm;
-        //	Moto2 = Balance_Pwm;
+         	Moto1 = Balance_Pwm;
+        	Moto2 = Balance_Pwm;
 
-        Moto1 = Balance_Pwm + Velocity_Pwm - Turn_Pwm; //===计算左轮电机最终PWM  通过第一章的推导，输出方程可以将串级PID的算法转化成为：一个单独的负反馈的直立环 + 一个单独的正反馈的速度环。Moto1=Balance_Pwm-Velocity_Pwm-Turn_Pwm; 这里究竟应该是用加号还是减号？
-        Moto2 = Balance_Pwm + Velocity_Pwm + Turn_Pwm; //===计算右轮电机最终PWM 即脉冲/秒， 需要8000/s的脉冲频率才能达到2.5n/s, 150rpm
+//        Moto1 = Balance_Pwm + Velocity_Pwm - Turn_Pwm; //===计算左轮电机最终PWM  通过第一章的推导，输出方程可以将串级PID的算法转化成为：一个单独的负反馈的直立环 + 一个单独的正反馈的速度环。Moto1=Balance_Pwm-Velocity_Pwm-Turn_Pwm; 这里究竟应该是用加号还是减号？
+//        Moto2 = Balance_Pwm + Velocity_Pwm + Turn_Pwm; //===计算右轮电机最终PWM 即脉冲/秒， 需要8000/s的脉冲频率才能达到2.5n/s, 150rpm
 
         // printf("%d \r\n",Moto1);
 
@@ -679,7 +685,7 @@ void ControlLoopPackage()
 
 
 
-        if (Turn_Off(roll) == 0) //===如果不存在异常
+        if (Turn_Off(Angle_Roll) == 0) //===如果不存在异常
         {
 
             ST = 0;                // 电机使能
@@ -805,7 +811,7 @@ void Get_Zhongzhi(void)
     if (Flag_Zhongzhi == 1) return;
 
     // 安全检测：如果车快倒了 (角度过大)，重置采样
-    if (fabs(roll) > 15.0f)
+    if (fabs(Angle_Roll) > 15.0f)
     {
         AutoZero_SumAngle = 0;
         AutoZero_Count = 0;
@@ -820,7 +826,7 @@ void Get_Zhongzhi(void)
     static int start_delay = 0;
     if (Flag_Stop == 0) start_delay++;
 
-    if (start_delay > 100 && fabs(roll) < 10.0f)
+    if (start_delay > 100 && fabs(Angle_Roll) < 10.0f)
     {
         AutoZero_InProgress = 1;
     }
@@ -828,7 +834,7 @@ void Get_Zhongzhi(void)
     // 执行采样
     if (AutoZero_InProgress == 1)
     {
-        AutoZero_SumAngle += (-roll); // 累加当前角度 (注意符号，你的 balance 函数用的是 -roll)
+        AutoZero_SumAngle += (-Angle_Roll); // 累加当前角度 (注意符号，你的 balance 函数用的是 -roll)
         AutoZero_Count++;
 
         // 采样足够次数 (假设 1kHz 中断，采样 2000 次 = 2 秒)
@@ -910,7 +916,7 @@ void MPU6050_Solve_Angle(short aacx, short aacy, short aacz,
     float ay = (float)aacy / 16384.0f;
     float az = (float)aacz / 16384.0f;
 
-   // 陀螺仪：±2000dps -> 16.4 LSB/(deg/s)  <-- 这里必须改！之前是131.0
+    // 陀螺仪：±2000dps -> 16.4 LSB/(deg/s)  <-- 这里必须改！之前是131.0
     float gx = (float)gyrox / 16.4f;
     float gy = (float)gyroy / 16.4f;
     float gz = (float)gyroz / 16.4f;

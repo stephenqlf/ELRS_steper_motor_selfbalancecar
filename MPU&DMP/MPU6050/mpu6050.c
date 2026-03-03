@@ -6,7 +6,7 @@ u8 MPU6050_Init(void)
 { 
 	u8 res, test=1; 
 	MPU_IIC_Init();//初始化IIC总线
-	
+	delay_ms(500);
 	
 	test=MPU_Write_Byte(MPU_PWR_MGMT1_REG,0X80);	//复位MPU6050
 	if(!test)
