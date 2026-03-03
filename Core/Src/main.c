@@ -58,7 +58,7 @@ long Remoter_Ch1 = 1500, Remoter_Ch2 = 1500, Arm_ch6 = 1500;
 
 
 
-float Balance_Kp = 200, Balance_Kd =0, Velocity_Kp =-0.35,Velocity_Ki=-0.09; //Balance_Kd =- 0.12
+float Balance_Kp = 350, Balance_Kd =-0.05; //Balance_Kd =- 0.12
 int Target_Velocity = 3000; // 默认速度快慢
 
 
@@ -153,7 +153,35 @@ int main(void)
     // 参数说明: &balance_kf, Q_angle, Q_gyro, R_angle, dt(秒)
     // 如果你的控制周期是 5ms (0.005s)，dt 必须填 0.005f
     // 如果不确定参数，先用这一组经典值：
-    Kalman_Filter_Init(&balance_kf, 0.001f, 0.003f, 0.5f, 0.005f);
+	/*
+	想平滑（去抖），加大R 或减小Q 。 
+    想反应快（跟手），减小 R 或加大 Q 。
+	=== 卡尔曼滤波调参指南 ===
+第一步：解决“剧烈抖动” (高频噪声)
+现象：如果角度数值像心电图一样乱跳（例如在 0.0 附近 ±2.0 快速波动）。
+原因：R (测量噪声) 太小了，滤波器太相信有噪声的加速度计。
+操作：增大 R_angle。
+尝试步骤：0.5 -> 1.0 -> 2.0 -> 5.0
+经验值：对于步进电机驱动的平衡车，震动很大，R 甚至可能需要设到 3.0 或 5.0。
+第二步：解决“反应迟钝/滞后” (相位延迟)
+现象：如果小车推一下，角度要过 0.5 秒才慢慢变过来，或者车倒了滤波器还没反应过来。
+原因：R 太大，或者 Q_angle (角度过程噪声) 太小。
+操作：
+稍微减小 R_angle (比如从 2.0 降到 1.0)。
+或者增大 Q_angle (比如从 0.001 升到 0.005)。
+注意：这会引入一些抖动，需要在平滑和快速之间找平衡点。
+第三步：解决“缓慢漂移” (低频漂移)
+现象：如果小车静止不动，角度却在几分钟内慢慢从 0.0 飘到了 5.0。
+原因：Q_gyro (陀螺仪偏置噪声) 太小，滤波器不相信陀螺仪有零漂，或者积分时间太长。
+操作：增大 Q_gyro。
+尝试步骤：0.003 -> 0.005 -> 0.01
+说明：通常 Q_gyro 对动态性能影响不大，主要影响长期稳定性。
+	
+	
+	
+	void Kalman_Filter_Init(Kalman_Filter_t *kf, float Q_angle, float Q_gyro, float R_angle, float dt)
+*/
+    Kalman_Filter_Init(&balance_kf, 0.001f, 0.003f, 5.0f, 0.0025f);
 	
 	
     MX_NVIC_Init();
