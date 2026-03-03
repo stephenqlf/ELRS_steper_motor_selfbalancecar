@@ -37,7 +37,7 @@ extern int Maximum_delta_speed;
 u8 mpu6050_data_flag;  //是否正常读取数据
 float xpeed = 0.0;
 const float Math_PI = 3.1415926;
-int DMP_Ready_Flag = 0;
+
 extern u8 mpu_dmp_flag;
 
 
@@ -596,15 +596,14 @@ void ControlLoopPackage()
 	
 	
 	
-    if(DMP_Ready_Flag == 1)
-    {
-        //Get_Angle(); //===更新姿态, DMP模式是FIFO,如果有数据不读，堵塞住了后是不是就再也读不到新数据了，确实是这样的
+   
+       
 		MPU6050_Data_read();	//获取陀螺仪数据	每5ms读取一次
 		Get_Elrs(); //===读取航模遥控器的数据
-        DMP_Ready_Flag = 0;
+       
 
 
-    }
+    
 	//MPU_Get_Gyroscope(&gyrox,&gyroy,&gyroz);
 	
     if ( click() == 1 )  //((Flag_Stop == 1) && (click() == 1) )
@@ -626,22 +625,12 @@ void ControlLoopPackage()
         Turn_Pwm = turn(Moto1, Moto2); //===速度环PI控制	 速度反馈是正反馈，就是小车快的时候要慢下来就需要再跑快一点
        // 		Moto1 = Balance_Pwm;
         //	Moto2 = Balance_Pwm;
-		 if(DMP_Ready_Flag == 1)
-		 {
+	
 		 Moto1 = Balance_Pwm + Velocity_Pwm - Turn_Pwm; //===计算左轮电机最终PWM  通过第一章的推导，输出方程可以将串级PID的算法转化成为：一个单独的负反馈的直立环 + 一个单独的正反馈的速度环。Moto1=Balance_Pwm-Velocity_Pwm-Turn_Pwm; 这里究竟应该是用加号还是减号？
         Moto2 = Balance_Pwm + Velocity_Pwm + Turn_Pwm; //===计算右轮电机最终PWM 即脉冲/秒， 需要8000/s的脉冲频率才能达到2.5n/s, 150rpm
 		 
 		 
-		 }
-		 else
-		 {
-		 
-		 
-		 Moto1 = Balance_Pwm + Velocity_Pwm; //===计算左轮电机最终PWM  通过第一章的推导，输出方程可以将串级PID的算法转化成为：一个单独的负反馈的直立环 + 一个单独的正反馈的速度环。Moto1=Balance_Pwm-Velocity_Pwm-Turn_Pwm; 这里究竟应该是用加号还是减号？
-        Moto2 = Balance_Pwm + Velocity_Pwm; //===计算右轮电机最终PWM 即脉冲/秒， 需要8000/s的脉冲频率才能达到2.5n/s, 150rpm
-		 
-		 
-		 }
+		
 //        Moto1 = Balance_Pwm + Velocity_Pwm - Turn_Pwm; //===计算左轮电机最终PWM  通过第一章的推导，输出方程可以将串级PID的算法转化成为：一个单独的负反馈的直立环 + 一个单独的正反馈的速度环。Moto1=Balance_Pwm-Velocity_Pwm-Turn_Pwm; 这里究竟应该是用加号还是减号？
 //        Moto2 = Balance_Pwm + Velocity_Pwm + Turn_Pwm; //===计算右轮电机最终PWM 即脉冲/秒， 需要8000/s的脉冲频率才能达到2.5n/s, 150rpm
 
@@ -867,40 +856,18 @@ void Get_Zhongzhi(void)
     }
 }
 
-/**************************************************************************
-函数功能：所有的控制代码都在这里面
-        5ms定时中断由MPU6050的INT引脚触发
-        严格保证采样和数据处理的时间同步
-        在中断中处理运算是否有问题，原则上中断不是只是提供事件标记，事件处理在主循环中处理吗？
-        如果直接在中断中处理，是否会阻拦其它关键事件的及时处理？
-**************************************************************************/
-// PA6 与MPU6050的INT引脚连接，设置为下降沿触发中断，中断处理函数在这里，这将使控制程序以5ms一次运行，与陀螺仪采样数据同步
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 
     // MPU_Flag=1;
-    DMP_Ready_Flag = 1;
+   
+	 ControlLoopPackage();
 }
 
 
 
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-    // 检查是否是 TIM2 引发的中断
-    if (htim->Instance == TIM2)
-    {
-        // 在这里添加您的中断处理代码
 
-        ControlLoopPackage();
-
-        // 例如：翻转LED指示灯
-        //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-
-        // 或者执行其他周期性任务
-        //printf("Timer 2 Update Interrupt Occurred!\n");
-    }
-}
 int map(int val, int I_Min, int I_Max, int O_Min, int O_Max)
 {
   return (val - I_Min) * (O_Max - O_Min) / (I_Max - I_Min) + O_Min;

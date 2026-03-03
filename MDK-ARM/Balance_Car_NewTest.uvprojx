@@ -540,6 +540,16 @@
               <FileType>1</FileType>
               <FilePath>..\MPU&amp;DMP\MPU6050\mpu6050.c</FilePath>
             </File>
+            <File>
+              <FileName>mpuiic.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\MPU&amp;DMP\MPU6050\mpuiic.h</FilePath>
+            </File>
+            <File>
+              <FileName>mpu6050.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\MPU&amp;DMP\MPU6050\mpu6050.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

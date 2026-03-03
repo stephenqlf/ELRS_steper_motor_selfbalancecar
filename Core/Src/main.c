@@ -139,12 +139,15 @@ int main(void)
   
 	
 	MX_TIM1_Init();
-    MX_TIM2_Init();
+   
     /* USER CODE BEGIN 2 */
     delay_init(100); 
     MX_NVIC_Init();
 
 
+	  MPU6050_Init();					                           //初始化MPU6050
+    mpu_dmp_flag = mpu_dmp_init();                 //初始化MPU6050的DMP
+    printf("MPU6050 DMP Initiate flag is %d \r\n", mpu_dmp_flag);	
 
 
 
@@ -157,7 +160,7 @@ int main(void)
 	
     HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
     HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_2); 
-    HAL_TIM_Base_Start_IT(&htim2);  // <<< 启动 TIM2 更新中断！
+    
  
 
     //HAL_UART_Receive_DMA(&huart6, (uint8_t *)&receive_buff, 255);  
@@ -170,9 +173,6 @@ int main(void)
 //    HAL_UARTEx_ReceiveToIdle_DMA(&huart6, (uint8_t *)&receive_buff, 255);  
 //    __HAL_UART_ENABLE_IT(&huart6, UART_IT_IDLE); 
 	
-	  MPU6050_Init();					                           //初始化MPU6050
-    mpu_dmp_flag = mpu_dmp_init();                 //初始化MPU6050的DMP
-    printf("MPU6050 DMP Initiate flag is %d \r\n", mpu_dmp_flag);	
 
     /* USER CODE END 2 */
 
