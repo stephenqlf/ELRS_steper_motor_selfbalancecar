@@ -12,6 +12,8 @@
 #include "printf.h"
 #include "crsf_parse.h"
 #include "oldtype.h"
+#include "kalman_filter.h"
+
 #define PRESCALER 99
 #define speedFilterConstant 0.7
 #define CRSF_CHANNEL_VALUE_MIN  172
@@ -29,16 +31,11 @@ float Angle_Pitch = 0.0f; // 前后倾角 (平衡车核心)
 float Angle_Roll  = 0.0f; // 左右倾角
 float Angle_Yaw   = 0.0f; // 航向角 (会漂移)
 
-// --- 静态变量：保存上一时刻的角度，用于积分 ---
-static float Last_Pitch = 0.0f;
-static float Last_Roll  = 0.0f;
-static float Last_Yaw   = 0.0f;
+
 
 // --- 配置参数 ---
-// 互补滤波系数：0.96 ~ 0.98 之间
-// 越大越信任陀螺仪(反应快但漂移)，越小越信任加速度计(稳但受震动影响)
-#define COMPLIMENTARY_ALPHA 0.98f
 
+extern Kalman_Filter_t balance_kf;
 
 
 
@@ -606,15 +603,15 @@ void ControlLoopPackage()
 
 
 
-//    if(DMP_Ready_Flag == 1)
-//    {
-//        //Get_Angle(); //===更新姿态, DMP模式是FIFO,如果有数据不读，堵塞住了后是不是就再也读不到新数据了，确实是这样的
-//        //MPU6050_Data_read();	//获取陀螺仪数据	每5ms读取一次
-//        Get_Elrs(); //===读取航模遥控器的数据
-//        DMP_Ready_Flag = 0;
-//		
-//		
-//    }
+    //    if(DMP_Ready_Flag == 1)
+    //    {
+    //        //Get_Angle(); //===更新姿态, DMP模式是FIFO,如果有数据不读，堵塞住了后是不是就再也读不到新数据了，确实是这样的
+    //        //MPU6050_Data_read();	//获取陀螺仪数据	每5ms读取一次
+    //        Get_Elrs(); //===读取航模遥控器的数据
+    //        DMP_Ready_Flag = 0;
+    //
+    //
+    //    }
 
     if ( click() == 1 )  //((Flag_Stop == 1) && (click() == 1) )
     {
@@ -622,57 +619,31 @@ void ControlLoopPackage()
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET); //黄色把警灯熄灭
 
     }
-	/*start to read gyro data*/
-
-		static float dt = 0.0025f; // 1ms = 0.001秒
-
-        // 1. 读取传感器数据 (假设你的读取函数已填充这些变量)
-        // 确保读取的是最新的数据
-
-        MPU_Get_Gyroscope(&gyrox, &gyroy, &gyroz); //更新陀螺仪数据
-
-        MPU_Get_Accelerometer(&aacx, &aacy, &aacz); //更新加速度计数据
-	
-	//printf("%d,%d,%d,%d,%d,%d \r\n" ,gyrox,gyroy,gyroz,aacx,aacy,aacz);
-
-        // 2. 解算角度
-        MPU6050_Solve_Angle(aacx, aacy, aacz, gyrox, gyroy, gyroz, dt);
+    /*start to read gyro data*/
+    Get_Balance_Angle();
 
 
+    // 示例：打印调试
+    //printf(" Roll: %.2f\r\n",  Angle_Roll);
 
-        // Kalman_Filter(Accel_Angle, Gyro_X); //卡尔曼滤波
-
-
-        //Yijielvbo(Accel_Angle,Gyro_X);    //互补滤波
-
-        //得到  -roll和gyrox;X轴朝前，Y轴朝左，Z轴朝上
-
-        // 3. 使用角度进行控制
-        // Angle_Pitch 是你直立环需要的核心角度 (前后)
-        // Angle_Roll 可用于限制最大倾斜或防侧翻
-        // gyroz (或 Angle_Yaw 的变化率) 用于转向环
-
-        // 示例：打印调试
-        //printf("Pitch: %.2f, Roll: %.2f\r\n", Angle_Pitch, Angle_Roll);
-       
-	/*start to read remote controller data*/
-         Get_Elrs(); //===读取航模遥控器的数据
+    /*start to read remote controller data*/
+    Get_Elrs(); //===读取航模遥控器的数据
 
 
     if (Flag_Stop == 0)
     {
-      
 
-		
+
+
         Balance_Pwm = balance(-Angle_Roll, gyrox); //===平衡控制 balanceValue = (int)(Balance_Kp * Bias + Balance_Kd * Gyro); //===计算平衡控制的电机PWM
         Velocity_Pwm = velocity(Moto1, Moto2);
         Turn_Pwm = turn(Moto1, Moto2); //===速度环PI控制	 速度反馈是正反馈，就是小车快的时候要慢下来就需要再跑快一点
 
-         	Moto1 = Balance_Pwm;
-        	Moto2 = Balance_Pwm;
+        Moto1 = Balance_Pwm;
+        Moto2 = Balance_Pwm;
 
-//        Moto1 = Balance_Pwm + Velocity_Pwm - Turn_Pwm; //===计算左轮电机最终PWM  通过第一章的推导，输出方程可以将串级PID的算法转化成为：一个单独的负反馈的直立环 + 一个单独的正反馈的速度环。Moto1=Balance_Pwm-Velocity_Pwm-Turn_Pwm; 这里究竟应该是用加号还是减号？
-//        Moto2 = Balance_Pwm + Velocity_Pwm + Turn_Pwm; //===计算右轮电机最终PWM 即脉冲/秒， 需要8000/s的脉冲频率才能达到2.5n/s, 150rpm
+        //        Moto1 = Balance_Pwm + Velocity_Pwm - Turn_Pwm; //===计算左轮电机最终PWM  通过第一章的推导，输出方程可以将串级PID的算法转化成为：一个单独的负反馈的直立环 + 一个单独的正反馈的速度环。Moto1=Balance_Pwm-Velocity_Pwm-Turn_Pwm; 这里究竟应该是用加号还是减号？
+        //        Moto2 = Balance_Pwm + Velocity_Pwm + Turn_Pwm; //===计算右轮电机最终PWM 即脉冲/秒， 需要8000/s的脉冲频率才能达到2.5n/s, 150rpm
 
         // printf("%d \r\n",Moto1);
 
@@ -906,52 +877,32 @@ int map(int val, int I_Min, int I_Max, int O_Min, int O_Max)
  * @param gyrox, gyroy, gyroz: 陀螺仪原始数据 (short/int16_t)
  * @param dt: 采样时间间隔 (秒)。例如：2ms中断则填 0.002f
  */
-void MPU6050_Solve_Angle(short aacx, short aacy, short aacz,
-                         short gyrox, short gyroy, short gyroz,
-                         float dt)
+void Get_Balance_Angle(void)
 {
-    // 1. 数据单位转换
-    // 加速度计：量程±2g，灵敏度 16384 LSB/g -> 转换为 g (重力单位)
-    float ax = (float)aacx / 16384.0f;
+    int16_t gyrox, gyroy, gyroz;
+    int16_t aacx, aacy, aacz;
+
+    // 1. 读取原始数据
+    MPU_Get_Gyroscope(&gyrox, &gyroy, &gyroz);
+    MPU_Get_Accelerometer(&aacx, &aacy, &aacz);
+
+    // 2. 数据单位转换 (严格按照你的要求)
+    // 陀螺仪：±2000dps -> 16.4 LSB/(deg/s)
+    float gyro_roll = (float)gyrox / 16.4f;
+
+    // 加速度计：计算 Roll 角度
+    // 注意：atan2f 内部会自动处理比例，所以 aacy/aacz 不需要除以 16384 也能算出正确角度
+    // 但为了代码统一性，这里演示转换过程 (实际可省略除法)
     float ay = (float)aacy / 16384.0f;
     float az = (float)aacz / 16384.0f;
 
-    // 陀螺仪：±2000dps -> 16.4 LSB/(deg/s)  <-- 这里必须改！之前是131.0
-    float gx = (float)gyrox / 16.4f;
-    float gy = (float)gyroy / 16.4f;
-    float gz = (float)gyroz / 16.4f;
+    // 计算角度 (弧度 -> 角度)
+    float acc_roll = atan2f(ay, az) * 57.29578f;
 
-    // 2. 从加速度计计算参考角度 (atan2 返回弧度，乘以 180/PI 转为角度)
+    // 3. 执行滤波 (传入已经是物理量的数据)
+    Kalman_Filter_Update(&balance_kf, acc_roll, gyro_roll);
 
-    // Pitch (前后倾): 绕Y轴转。由 X轴加速度(ax) 和 Z轴加速度(az) 决定
-    // 公式推导：当车前倾，ax为正(假设)，az减小。atan2(-ax, az) 或 atan2(ax, sqrt(ay^2+az^2))
-    // 这里使用标准公式：Pitch = atan2(-ax, sqrt(ay*ay + az*az))
-    float Accel_Pitch = atan2f(-ax, sqrtf(ay * ay + az * az)) * 180.0f / PI;
-
-    // Roll (左右倾): 绕X轴转。由 Y轴加速度(ay) 和 Z轴加速度(az) 决定
-    // 公式：Roll = atan2(ay, az)
-    float Accel_Roll = atan2f(ay, az) * 180.0f / PI;
-
-    // 3. 互补滤波融合 (核心算法)
-    // 公式：新角度 = Alpha * (旧角度 + 陀螺仪*dt) + (1-Alpha) * 加速度计角度
-
-    // --- 计算 Pitch ---
-    Angle_Pitch = COMPLIMENTARY_ALPHA * (Last_Pitch + gy * dt) + (1.0f - COMPLIMENTARY_ALPHA) * Accel_Pitch;
-
-    // --- 计算 Roll ---
-    Angle_Roll = COMPLIMENTARY_ALPHA * (Last_Roll + gx * dt) + (1.0f - COMPLIMENTARY_ALPHA) * Accel_Roll;
-
-    // --- 计算 Yaw (仅积分，无修正) ---
-    // 警告：MPU6050无磁力计，此角度会随时间漂移，仅适用于短时转向控制
-    Angle_Yaw = Last_Yaw + gz * dt;
-
-    // Yaw 角度归一化到 -180 ~ 180 (可选，防止数值过大)
-    if (Angle_Yaw > 180.0f) Angle_Yaw -= 360.0f;
-    if (Angle_Yaw < -180.0f) Angle_Yaw += 360.0f;
-
-    // 4. 更新历史值，供下一次循环使用
-    Last_Pitch = Angle_Pitch;
-    Last_Roll = Angle_Roll;
-    Last_Yaw = Angle_Yaw;
+    // 4. 获取结果
+    Angle_Roll = balance_kf.angle;     // 用于 PID P
+    gyrox = balance_kf.angle_dot; // 用于 PID D
 }
-

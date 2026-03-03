@@ -1671,14 +1671,14 @@
           <GroupName>filter</GroupName>
           <Files>
             <File>
-              <FileName>filter.c</FileName>
+              <FileName>kalman_filter.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\filter\filter.c</FilePath>
+              <FilePath>..\filter\kalman_filter.c</FilePath>
             </File>
             <File>
-              <FileName>filter.h</FileName>
+              <FileName>kalman_filter.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\filter\filter.h</FilePath>
+              <FilePath>..\filter\kalman_filter.h</FilePath>
             </File>
           </Files>
         </Group>

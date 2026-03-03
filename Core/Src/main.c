@@ -23,7 +23,7 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
-
+#include "kalman_filter.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -64,7 +64,7 @@ int Target_Velocity = 3000; // 默认速度快慢
 
 float Zhongzhi = -0.55f;
 
-
+extern Kalman_Filter_t balance_kf; // 全局变量
 
 int Balance_Pwm, Velocity_Pwm, Turn_Pwm;
 int MPU_Flag;
@@ -149,7 +149,11 @@ int main(void)
    // mpu_dmp_flag = mpu_dmp_init();                 //初始化MPU6050的DMP
 //    printf("MPU6050 DMP Initiate flag is %d \r\n", mpu_dmp_flag);	
 	
-	
+	// ??? 关键步骤：初始化卡尔曼滤波器 ???
+    // 参数说明: &balance_kf, Q_angle, Q_gyro, R_angle, dt(秒)
+    // 如果你的控制周期是 5ms (0.005s)，dt 必须填 0.005f
+    // 如果不确定参数，先用这一组经典值：
+    Kalman_Filter_Init(&balance_kf, 0.001f, 0.003f, 0.5f, 0.005f);
 	
 	
     MX_NVIC_Init();
@@ -162,7 +166,7 @@ int main(void)
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
 
-    delay_ms(2000);
+    delay_ms(200);
 	
 	
     HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
@@ -181,7 +185,7 @@ int main(void)
 //    __HAL_UART_ENABLE_IT(&huart6, UART_IT_IDLE); 
 	
 	 
-   delay_ms(2000);
+   delay_ms(200);
     /* USER CODE END 2 */
 
     /* Infinite loop */

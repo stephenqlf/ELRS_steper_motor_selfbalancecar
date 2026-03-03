@@ -37,6 +37,7 @@ void  Get_Zhongzhi(void);
 void MPU6050_Data_read(void);
 int turn(int velocity_left,int velocity_right);//×ªÏò¿ØÖÆ
 void  Get_Elrs(void);
+void Get_Balance_Angle(void);
 int map(int val, int I_Min, int I_Max, int O_Min, int O_Max);
 void MPU6050_Solve_Angle(short aacx, short aacy, short aacz, 
                          short gyrox, short gyroy, short gyroz, 
