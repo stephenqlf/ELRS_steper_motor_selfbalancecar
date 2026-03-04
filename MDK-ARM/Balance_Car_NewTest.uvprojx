@@ -490,6 +490,11 @@
               <FileType>1</FileType>
               <FilePath>..\CRSF\crsf_parse.c</FilePath>
             </File>
+            <File>
+              <FileName>crsf_parse.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\CRSF\crsf_parse.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

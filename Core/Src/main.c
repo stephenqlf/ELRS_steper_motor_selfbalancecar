@@ -29,7 +29,7 @@
 
 //#include "arm_math.h" //确保使用FPU加速浮点计算
 
-
+#include "crsf_parse.h"
 
 
 

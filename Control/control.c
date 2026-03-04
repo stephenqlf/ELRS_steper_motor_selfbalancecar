@@ -174,7 +174,9 @@ int balance(float Angle, float Gyro)
 **************************************************************************/
 int velocity(int velocity_left, int velocity_right)
 {
-    // --- 1. 静态变量定义 ---
+   /*修改为feedforward，没有积分
+
+	// --- 1. 静态变量定义 ---
     static float SpeedError_Integral = 0;       // 积分项
     static float Estimated_Speed = 0;           // 估算的实际速度
     static float Smooth_Target_Velocity = 0;    // 平滑后的目标速度 (软启动用)
@@ -245,9 +247,45 @@ int velocity(int velocity_left, int velocity_right)
 
     return (int)Velocity_Output;
 
+	*/
 	
-	
-	
+	static float Smooth_Target_Velocity = 0;    
+    // 删除 Estimated_Speed 和 Last_Velocity_Output 的反馈循环！
+    // 对于开环步进，不要试图用输出去估算速度，那是自欺欺人。
+    
+    const float Kp_Feedforward = 0.4f; // 纯前馈系数，根据实验调整
+    const float Ramp_Step = 30.0f;     
+    const float Dead_Zone = 50.0f;
+
+    float Raw_Target = 0;
+    if (Flag_Qian) Raw_Target = (float)Target_Velocity;
+    else if (Flag_Hou) Raw_Target = -(float)Target_Velocity;
+    else Raw_Target = 0;
+
+    // 软启动
+    if (Raw_Target > Smooth_Target_Velocity) {
+        Smooth_Target_Velocity += Ramp_Step;
+        if (Smooth_Target_Velocity > Raw_Target) Smooth_Target_Velocity = Raw_Target;
+    } else if (Raw_Target < Smooth_Target_Velocity) {
+        Smooth_Target_Velocity -= Ramp_Step;
+        if (Smooth_Target_Velocity < Raw_Target) Smooth_Target_Velocity = Raw_Target;
+    }
+
+    // 死区
+    if (fabsf(Smooth_Target_Velocity) < Dead_Zone && fabsf(Raw_Target) < Dead_Zone) {
+        Smooth_Target_Velocity = 0;
+        return 0; 
+    }
+
+    // 【关键修改】：只用前馈，不用反馈积分！
+    // 既然无法知道真实速度，就不要强行纠正“认为的速度误差”。
+    // 让直立环去处理稳定性，速度环只负责给一个“期望的推力”。
+    float Velocity_Output = Smooth_Target_Velocity * Kp_Feedforward;
+
+    // 如果一定要保留一点积分来克服静摩擦，必须严格限制其权重，且不能依赖估算速度
+    // 这里建议先完全去掉积分项测试，看是否还抖动。
+    
+    return (int)Velocity_Output;
 	
 	
 /*原来的方式*/
