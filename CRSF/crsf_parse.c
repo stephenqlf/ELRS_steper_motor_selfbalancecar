@@ -114,7 +114,7 @@ void CRSF_Debug(void){
 //	printf("%x,%x,%x,%x,%x,%x,%x,%x\n",dma_rx_buf[0],dma_rx_buf[1],dma_rx_buf[2],dma_rx_buf[3]
 //			,dma_rx_buf[4],dma_rx_buf[5],dma_rx_buf[6],dma_rx_buf[7]);
 	//////////输出解析数据///////////
-	printf("%d,%d,%d,%d,%d,%d,%d,%d\n",CRSF_RX_packet.CH[0],CRSF_RX_packet.CH[1]
+	printf("%d,%d,%d,%d,%d,%d,%d,%d \r\n",CRSF_RX_packet.CH[0],CRSF_RX_packet.CH[1]
 					,CRSF_RX_packet.CH[2],CRSF_RX_packet.CH[3]
 					,CRSF_RX_packet.CH[4],CRSF_RX_packet.CH[5]
 					,CRSF_RX_packet.CH[6],CRSF_RX_packet.CH[7]);

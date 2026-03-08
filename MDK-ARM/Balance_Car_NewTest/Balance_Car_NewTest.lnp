@@ -34,6 +34,7 @@
 "balance_car_newtest\stm32f4xx_hal_exti.o"
 "balance_car_newtest\stm32f4xx_hal_uart.o"
 "balance_car_newtest\system_stm32f4xx.o"
+"balance_car_newtest\balance.o"
 --library_type=microlib --strict --scatter "Balance_Car_NewTest\Balance_Car_NewTest.sct"
 --summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
 --info sizes --info totals --info unused --info veneers

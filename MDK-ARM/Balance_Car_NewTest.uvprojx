@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F411xE</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../CRSF;../Users;../MDK-ARM;../MOTOR;../Control;..\MPU&amp;DMP;..\MPU&amp;DMP\MPU_INT;..\MPU&amp;DMP\MPU6050;..\MPU&amp;DMP\MPU6050\eMPL</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../CRSF;../Users;../MDK-ARM;../MOTOR;../Control;..\MPU&amp;DMP;..\MPU&amp;DMP\MPU_INT;..\MPU&amp;DMP\MPU6050;..\MPU&amp;DMP\MPU6050\eMPL;..\pid</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -565,6 +565,11 @@
               <FileType>1</FileType>
               <FilePath>..\MOTOR\motor.c</FilePath>
             </File>
+            <File>
+              <FileName>motor.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\MOTOR\motor.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -579,6 +584,11 @@
               <FileName>control.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Control\control.h</FilePath>
+            </File>
+            <File>
+              <FileName>backup.txt</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\backup.txt</FilePath>
             </File>
           </Files>
         </Group>
@@ -1679,6 +1689,21 @@
                   </Cads>
                 </FileArmAds>
               </FileOption>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>pid</GroupName>
+          <Files>
+            <File>
+              <FileName>balance.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\pid\balance.c</FilePath>
+            </File>
+            <File>
+              <FileName>balance.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\pid\balance.h</FilePath>
             </File>
           </Files>
         </Group>

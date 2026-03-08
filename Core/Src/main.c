@@ -56,15 +56,26 @@ u32 Distance;
 float Acceleration_Z;                       
 long Remoter_Ch1 = 1500, Remoter_Ch2 = 1500, Arm_ch6 = 1500; 
 
+// 状态标志
+u8 Flag_Stop = 1;             // 初始为停止状态
+u8 Flag_Zhongzhi = 0;         // 中值校准完成标志
+u8 ZeroRequirementMean = 0;   // 需要重置均值
+u8 ZeroRequirementSpeedPid = 0; // 需要重置速度 PID
+
+float Balance_Kp = 650, Balance_Kd =- 0.12, Velocity_Kp =-0.35,Velocity_Ki=-0.09; //PID????Balance_Kp=1500,Balance_Kd=-0.8,Velocity_Kp=20,,Velocity_Ki=Velocity_Kp/200, 500,-1.25, 42  Balance_Kd = -0.37,
+int Target_Velocity = 4000; // 默认速度快慢
 
 
-float Balance_Kp = 600, Balance_Kd =- 0.12, Velocity_Kp =-0.35,Velocity_Ki=-0.09; //PID????Balance_Kp=1500,Balance_Kd=-0.8,Velocity_Kp=20,,Velocity_Ki=Velocity_Kp/200, 500,-1.25, 42  Balance_Kd = -0.37,
-int Target_Velocity = 3000; // 默认速度快慢
+float Zhongzhi = 2.0f;
 
-
-float Zhongzhi = -0.55f;
-
-
+// 传感器数据 (如果 MPU6050.c 中没有定义，则在这里定义)
+// 注意：如果 mpu6050.c 中已经定义了 pitch, roll 等，请删除下面这几行，避免重复定义
+float pitch = 0.0f;
+float roll = 0.0f;
+float yaw = 0.0f;
+short gyrox = 0;
+short gyroy = 0;
+short gyroz = 0;
 
 int Balance_Pwm, Velocity_Pwm, Turn_Pwm;
 int MPU_Flag;
@@ -139,7 +150,7 @@ int main(void)
   
 	
 	MX_TIM1_Init();
-   
+       MX_TIM2_Init();
     /* USER CODE BEGIN 2 */
     delay_init(100); 
     MX_NVIC_Init();
@@ -157,10 +168,16 @@ int main(void)
 
     delay_ms(2000);
 	
-	
-    HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_1);
-    HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_2); 
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1); // 启动左电机通道
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2); // 启动右电机通道
+  
+  // 初始设置为停止状态 (占空比 0)
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
     
+
+
+HAL_TIM_Base_Start_IT(&htim2);  // <<< 启动 TIM2 更新中断！
  
 
     //HAL_UART_Receive_DMA(&huart6, (uint8_t *)&receive_buff, 255);  
@@ -168,7 +185,7 @@ int main(void)
     //Test Motor Rotation
     //		Left_Direction=1;
     //		Right_Direction=1;
-    ST = 1; //????1???????
+    
 	CRSF_Init(&huart6);
 //    HAL_UARTEx_ReceiveToIdle_DMA(&huart6, (uint8_t *)&receive_buff, 255);  
 //    __HAL_UART_ENABLE_IT(&huart6, UART_IT_IDLE); 

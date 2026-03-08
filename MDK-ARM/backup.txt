@@ -1,0 +1,964 @@
+
+
+#include "math.h"
+#include "stdio.h"
+#include "string.h"
+#include "usart.h"
+#include "stm32f4xx.h" // Device header
+#include "oldtype.h"
+#include "motor.h"
+#include "control.h"
+#include "MPU6050.h"
+#include "printf.h"
+#include "crsf_parse.h"
+#include "oldtype.h"
+#define PRESCALER 99
+#define speedFilterConstant 0.7
+#define CRSF_CHANNEL_VALUE_MIN  172
+#define CRSF_CHANNEL_VALUE_MAX  1811
+
+/* ================= 配置区域 ================= */
+// 控制周期 (秒)。如果你的中断是 200Hz (5ms)，则为 0.005；如果是 500Hz (2ms)，则为 0.002
+// 请根据你的 HAL_GPIO_EXTI_Callback 触发频率实际测量后修改此处
+#define CONTROL_DT  (0.005f) 
+
+// PID 参数 (基于参考项目逻辑，但需根据你的车体重新微调)
+// 直立环 (Angle Loop) - 外环
+#define KP_ANG      (30.0f)   // 原 1190 (量纲不同，需大幅减小)
+#define TI_ANG      (0.15f)   // 积分时间
+#define TD_ANG      (0.0f)    // 微分时间
+
+// 角速度环 (Gyro Loop) - 内环
+#define KP_PAL      (-1.2f)   // 原 -2.85
+#define TI_PAL      (0.4f)
+#define TD_PAL      (0.0f)
+
+// 速度环 (Velocity Loop)
+#define KP_VEL      (-0.4f)   // 原 2.4e-4 (量纲不同)
+#define TI_VEL      (0.5f)
+#define TD_VEL      (0.0f)
+
+// 转向环 (Turn Loop)
+#define KP_TURN     (-0.6f)   // 原 -0.365
+#define TI_TURN     (500.0f)
+#define TD_TURN     (0.0f)
+
+// 软启动与限幅
+#define VEL_RAMP_STEP   (30.0f)   // 速度软启动步长
+#define TURN_GAIN       (400.0f)  // 转向增益
+#define TURN_FILTER_COEF (0.1f)   // 转向滤波系数
+#define MAX_MOTO        (13000)   // 最大 PWM 值
+#define MOTO_DEADZONE   (100)     // 死区 (防止除以零)
+
+/* ================= 全局变量声明 ================= */
+// 这些变量在你的原文件中已定义为 extern 或全局
+extern u8 Flag_Stop, ZeroRequirementSpeedPid, ZeroRequirementMean;
+extern float pitch, roll, yaw;
+extern short gyrox, gyroy, gyroz;
+extern u32 Arm_ch6;
+extern float Remoter_Ch1, Remoter_Ch2;
+extern u8 Flag_Qian, Flag_Hou, Flag_Left, Flag_Right, Flag_sudu;
+extern int Moto1, Moto2, Final_Moto1, Final_Moto2;
+extern int Target_Velocity;
+extern float Acceleration_Z;
+extern u8 mpu_dmp_flag;
+extern float Zhongzhi;
+extern u8 Flag_Zhongzhi;
+
+// 本地全局标志
+u8 mpu6050_data_flag;
+u8 fall_down = 0; // 跌倒标志
+
+/* ================= 内部静态变量 (PID 状态) ================= */
+// 角度环状态
+static float ang_e_k_1 = 0, ang_e_k_2 = 0;
+// 角速度环状态
+static float pal_e_k_1 = 0, pal_e_k_2 = 0;
+// 速度环状态
+static float vel_e_k_1 = 0, vel_e_k_2 = 0;
+static float vel_integral = 0;
+static float smooth_target_vel = 0; // 软启动目标
+static float estimated_speed = 0;   // 估算速度
+static float last_vel_output = 0;
+
+// 转向环状态
+static float turn_e_k_1 = 0;
+static float turn_integral = 0;
+static float smooth_turn_output = 0;
+
+// 自动中值状态
+static float AutoZero_SumAngle = 0.0f;
+static int AutoZero_Count = 0;
+static u8 AutoZero_InProgress = 0;
+static int start_delay = 0;
+
+/* ================= 辅助函数声明 ================= */
+void Balance_PID_Calculate(float *p_balance_pwm, float *p_turn_pwm);
+void Auto_Calibrate_Zhongzhi(void);
+int myabs(int a); // 假设已有，若无则取消注释下方实现
+u8 Flag_Stop = 1, ZeroRequirementSpeedPid = 0, ZeroRequirementMean = 0;
+float pitch,roll,yaw;  //欧拉角
+short aacx,aacy,aacz;	 //加速度传感器原始数据
+short gyrox,gyroy,gyroz;//陀螺仪原始数据
+extern u32 Arm_ch6;
+extern int Voltage;                                              // 电池电压采样相关的变量
+extern float Remoter_Ch1, Remoter_Ch2;                           // 航模遥控接收变量
+extern float Balance_Kp, Balance_Kd, Velocity_Kp, Velocity_Ki;   // PID参数
+extern u8 Flag_Qian, Flag_Hou, Flag_Left, Flag_Right, Flag_sudu; // 蓝牙遥控相关的变量
+extern int Moto1, Moto2, Final_Moto1, Final_Moto2;               // 电机PWM变量 应是Motor的 向Moto致敬
+extern int Target_Velocity;
+extern u8 Flag_Qian, Flag_Hou, Flag_Left, Flag_Right;            // 蓝牙遥控相关的变量                //停止标志位和 显示标志位 默认停止 显示打开
+
+extern float Acceleration_Z; // Z轴加速度计
+extern int _channels[];
+extern int MPU_Flag;
+extern int Rx_Available_Flag;
+extern int Maximum_delta_speed;
+u8 mpu6050_data_flag;  //是否正常读取数据
+float xpeed = 0.0;
+const float Math_PI = 3.1415926;
+
+extern u8 mpu_dmp_flag;
+
+
+extern float Zhongzhi ;
+u8 Flag_Zhongzhi = 0; // 0: 未校准，1: 已校准
+
+// 自动找中值专用变量
+float AutoZero_SumAngle = 0.0f;
+int AutoZero_Count = 0;
+u8 AutoZero_InProgress = 0; 
+
+
+//************MPU6050相关数据读取********************
+void MPU6050_Data_read(void)
+{
+   mpu6050_data_flag=mpu_dmp_get_data(&pitch,&roll,&yaw);      //得到角度数据
+	//MPU_Get_Accelerometer(&aacx,&aacy,&aacz); //得到加速度传感器数据
+	//printf("roll angle is %f \r\n ", roll);
+	  
+}
+/**************************************************************************
+函数功能：按键扫描
+入口参数：双击等待时间
+返回  值：按键状态 0：无动作 1：单击 2：双击
+**************************************************************************/
+u8 click_N_Double (u8 time)
+{
+    static	u8 flag_key, count_key, double_key;
+    static	u16 count_single, Forever_count;
+    if(KEY == 0)  Forever_count++; //长按标志位未置1
+    else        Forever_count = 0;
+    if(0 == KEY && 0 == flag_key)		flag_key = 1;
+    if(0 == count_key)
+    {
+        if(flag_key == 1)
+        {
+            double_key++;
+            count_key = 1;
+        }
+        if(double_key == 2)
+        {
+            double_key = 0;
+            count_single = 0;
+            return 2;//双击执行的指令
+        }
+    }
+    if(1 == KEY)			flag_key = 0, count_key = 0;
+
+    if(1 == double_key)
+    {
+        count_single++;
+        if(count_single > time && Forever_count < time)
+        {
+            double_key = 0;
+            count_single = 0;
+            return 1;//单击执行的指令
+        }
+        if(Forever_count > time)
+        {
+            double_key = 0;
+            count_single = 0;
+        }
+    }
+    return 0;
+}
+/**************************************************************************
+函数功能：按键扫描
+入口参数：无
+返回  值：按键状态 0：无动作 1：单击
+**************************************************************************/
+u8 click(void)
+{
+    static u8 flag_key = 1; //按键按松开标志
+    if(flag_key && KEY == 0)
+    {
+        flag_key = 0;
+        return 1;	// 按键按下
+    }
+    else if(1 == KEY)			flag_key = 1;
+    return 0;//无按键按下
+}
+/**************************************************************************
+函数功能：长按检测
+入口参数：无
+返回  值：按键状态 0：无动作 1：长按2s
+**************************************************************************/
+u8 Long_Press(void)
+{
+    static u16 Long_Press_count, Long_Press;
+    if(Long_Press == 0 && KEY == 0)  Long_Press_count++; //长按标志位未置1
+    else                       Long_Press_count = 0;
+    if(Long_Press_count > 400)
+    {
+        Long_Press = 1;
+        Long_Press_count = 0;
+        return 1;
+    }
+    if(Long_Press == 1)   //长按标志位置1
+    {
+        Long_Press = 0;
+    }
+    return 0;
+}
+
+
+
+
+/**************************************************************************
+函数功能：赋值给PWM寄存器,并且判断转向
+入口参数：左轮PWM、右轮PWM
+返回  值：无
+**************************************************************************/
+void Set_Pwm(int moto1, int moto2)
+{
+    /*这里没有说moto1和moto2等于0时怎么办*/
+
+    if (moto1 > 0)
+        Right_Direction = 0;
+    else
+        Right_Direction = 1;
+    if (moto2 > 0)
+        Left_Direction = 0;
+    else
+        Left_Direction = 1;
+    Final_Moto1 = Linear_Conversion(moto1); // 线性化
+    Final_Moto2 = Linear_Conversion(moto2);
+    // printf("M1 is %d  \r\n", Final_Moto1);
+}
+
+/**************************************************************************
+函数功能：异常关闭电机
+入口参数：倾角和电压
+返回  值：1：异常  0：正常
+**************************************************************************/
+
+u8 Turn_Off(float angle)
+{
+    u8 temp;
+
+
+
+    if(Arm_ch6 > 800 && Arm_ch6 < 1200 && fabsf(angle) < 20.0f ) // 解锁按钮在解锁位置,竖直状态  myabs(angle) < 50,Angle 0.00000时，这个比较反馈为False，不知道为什么
+    {
+
+        temp = 0;
+
+
+    }
+    else
+    {
+        temp = 1;
+        printf("Arm value %ld, Angle value %f \r\n", Arm_ch6, angle);
+
+
+    }
+
+
+
+
+    return temp;
+}
+/**************************************************************************
+函数功能：检测小车是否被拿起
+入口参数：int
+返回  值：unsigned int
+**************************************************************************/
+int Pick_Up(float Acceleration, float Angle, int encoder_left, int encoder_right)
+{
+    static u16 flag, count0, count1, count2;
+    if(flag == 0)                                                                 //第一步
+    {
+        if(myabs(encoder_left) + myabs(encoder_right) < 700)                     //条件1，小车接近静止
+            count0++;
+        else
+            count0 = 0;
+        if(count0 > 10)
+            flag = 1, count0 = 0;
+    }
+    if(flag == 1)                                                                //进入第二步
+    {
+        if(++count1 > 400)       count1 = 0, flag = 0;                          //超时不再等待2000ms
+        if(Acceleration > 28000 && (Angle > (-20 + Zhongzhi)) && (Angle < (20 + Zhongzhi)) && Flag_Qian != 1 && Flag_Hou != 1 && Flag_Left != 1 && Flag_Right != 1) //条件2，小车是在0度附近被拿起
+            flag = 2;
+    }
+    if(flag == 2)                                                                //第三步
+    {
+        if(++count2 > 200)       count2 = 0, flag = 0;                            //超时不再等待1000ms
+        if(myabs(encoder_left + encoder_right) > 9900)                             //条件3，小车的轮胎因为正反馈达到最大的转速
+        {
+            flag = 0;
+            return 1;                                                               //检测到小车被拿起
+        }
+    }
+    return 0;
+}
+
+/**************************************************************************
+函数功能：采集遥控器的信号
+入口参数：无
+返回  值：无
+**************************************************************************/
+void Get_Elrs()
+{
+
+    Remoter_Ch1 = map(CRSF_RX_packet.CH[1], CRSF_CHANNEL_VALUE_MIN, CRSF_CHANNEL_VALUE_MAX, -1000, 1000);
+    Remoter_Ch2 =  map(CRSF_RX_packet.CH[3], CRSF_CHANNEL_VALUE_MIN, CRSF_CHANNEL_VALUE_MAX, -1000, 1000);
+    Arm_ch6 = map(CRSF_RX_packet.CH[5], CRSF_CHANNEL_VALUE_MIN, CRSF_CHANNEL_VALUE_MAX, -1000, 1000);
+
+
+    // printf( "ch1 %f, ch2 %f ,arm ch6 is %f \r\n", Remoter_Ch1,Remoter_Ch2,Arm_ch6);
+
+
+
+    float a = atan2(Remoter_Ch1, Remoter_Ch2);
+    float p = sqrt(pow(Remoter_Ch1, 2) + pow(Remoter_Ch2, 2));
+
+    if (p > 200)
+    {
+        if (a > Math_PI / 4 && a <= Math_PI / 4 * 3)
+        {
+            Flag_Qian = 1, Flag_Hou = 0;
+            Flag_Left = 0, Flag_Right = 0;
+            // printf("前进\r\n");
+        }
+        else if (a > -Math_PI / 4 * 3 && a <= -Math_PI / 4)
+        {
+            Flag_Qian = 0, Flag_Hou = 1;
+            Flag_Left = 0, Flag_Right = 0;
+            // printf("后退\r\n");
+        }
+        else if (a > -Math_PI / 4 && a <= Math_PI / 4)
+        {
+            Flag_Left = 0, Flag_Right = 1;
+            Flag_Qian = 0, Flag_Hou = 0;
+            // printf("右转\r\n");
+        }
+        else
+        {
+            Flag_Left = 1, Flag_Right = 0;
+            Flag_Qian = 0, Flag_Hou = 0;
+
+            // printf("左转\r\n");
+        }
+    }
+    else if (p < 200)
+
+    {
+        Flag_Left = 0, Flag_Right = 0;
+        Flag_Qian = 0, Flag_Hou = 0;
+
+        // printf("停止\r\n");
+    }
+
+
+}
+
+
+/**************************************************************************
+函数功能：绝对值函数
+入口参数：int
+返回  值：unsigned int
+**************************************************************************/
+int myabs(int a)
+{
+    int temp;
+    if (a < 0)
+        temp = -a;
+    else
+        temp = a;
+    return temp;
+}
+
+
+/**************************************************************************
+函数功能：对控制输出的PWM线性化,便于给系统寄存器赋值
+入口参数：PWM
+返回  值：线性化后的PWM，小值变大，大值变小，其结果是moto值相当于转速，转速越小，CCR值越大, 本工程使用的F411芯片，TIM1连到APB2上，速度是100MHz
+**************************************************************************/
+u16 Linear_Conversion(int moto)
+{
+    u32 temp;
+    u16 Linear_Moto;
+    if (moto == 0)
+    {
+        return 65535; // 或一个极大值，让频率≈0
+    }
+
+    temp = 100000000 / (99 + 1) / myabs(moto) / 2; //timer oc toggle 两个周期才能输出一个完整的脉冲，驱动步进电机的一个微步
+    if (temp > 65535)
+        Linear_Moto = 65535;
+    // if(temp > 4000) Linear_Moto = 4000;//计时器的频率为100万每秒，1ms只能读数到1000，5ms只能读数到5000，超过5000的值则在一个控制周期内还未读完，这里ccr值又变大,可能导致永远也不跳转
+    else
+        Linear_Moto = (u16)temp;
+    //    if (temp < 75)
+    //        Linear_Moto = 75; // 最小脉冲个数值60个，比这更低马达功率的扭矩不够，转不起来
+    //    else
+    //        Linear_Moto = (u16)temp;
+    static int print_count = 0;
+    print_count++;
+    if (print_count == 50)
+    {
+        print_count = 0;
+
+        //printf("Linear_Moto is %d \r\n", Linear_Moto);
+    }
+    return Linear_Moto; // 计算结果会用1000000/Linear_Moto得到每秒能发多少个脉冲，然后/16/200,就是多少n/s，如果最大转速为
+}
+
+
+/* ================= 主控制循环 ================= */
+void ControlLoopPackage()
+{
+    // 性能测试引脚翻转
+
+// 性能测试引脚翻转
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); 
+
+    static int last_Moto1 = 0, last_Moto2 = 0;
+    last_Moto1 = Moto1;
+    last_Moto2 = Moto2;
+
+    // 1. 读取传感器数据 (非阻塞)
+    // 假设 mpu_dmp_get_data 返回 0 表示成功，非 0 表示无新数据
+    // 即使无新数据，pitch/gyro 全局变量应保持上一次的值，保证循环不卡顿
+    mpu6050_data_flag = mpu_dmp_get_data(&pitch, &roll, &yaw);
+    
+    // 如果传感器完全失效，可根据 flag 处理，这里暂且认为全局变量已更新或保持旧值
+
+    // 2. 读取遥控器
+    Get_Elrs(); 
+
+    // 3. 按键启停
+    if (click() == 1) {
+        Flag_Stop = 0;
+        fall_down = 0; // 重置跌倒标志
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET); // 熄灭报警灯
+    }
+
+    // 4. 跌倒检测
+    if (fabsf(pitch) > 55.0f || fabsf(roll) > 55.0f) {
+        fall_down = 1;
+        Flag_Stop = 1;
+    }
+
+    if (Flag_Stop == 0 && !fall_down)
+    {
+        // --- A. 自动校准中值 ---
+        Auto_Calibrate_Zhongzhi();
+
+        // --- B. 执行核心 PID 算法 ---
+        int balance_pwm = 0;
+        int turn_pwm = 0;
+        
+        Balance_PID_Calculate(&balance_pwm, &turn_pwm);
+
+        // --- C. 合成电机输出 ---
+        // 左轮 = 直立 + 速度 (已包含在直立逻辑的目标角度偏移中或直接叠加) + 转向
+        // 注意：参考项目的速度环输出是角度偏移量，这里为了兼容你的架构，
+        // 我们在 Balance_PID_Calculate 内部已经处理了速度环对直立的影响，
+        // 或者你可以选择简单的叠加方式：Moto = Balance + Velocity + Turn
+        // 下面采用经典的叠加方式 (需根据实际调试正负号)
+        
+        // 由于上面的 Balance_PID_Calculate 设计为串级，它直接输出最终的直立分量
+        // 如果需要单独的速度分量叠加，请调整函数返回值。
+        // 这里假设 balance_pwm 已经是 (直立环 + 速度环修正) 的结果
+        
+        Moto1 = balance_pwm + turn_pwm;
+        Moto2 = balance_pwm - turn_pwm;
+
+        // --- D. 限幅与死区处理 (适配你的 Linear_Conversion) ---
+        // 限幅
+        if (Moto1 > MAX_MOTO) Moto1 = MAX_MOTO;
+        if (Moto1 < -MAX_MOTO) Moto1 = -MAX_MOTO;
+        if (Moto2 > MAX_MOTO) Moto2 = MAX_MOTO;
+        if (Moto2 < -MAX_MOTO) Moto2 = -MAX_MOTO;
+
+        // 死区 (防止 moto=0 导致 Linear_Conversion 除零)
+        if (Moto1 != 0 && myabs(Moto1) < MOTO_DEADZONE) 
+            Moto1 = (Moto1 > 0) ? MOTO_DEADZONE : -MOTO_DEADZONE;
+        if (Moto2 != 0 && myabs(Moto2) < MOTO_DEADZONE) 
+            Moto2 = (Moto2 > 0) ? MOTO_DEADZONE : -MOTO_DEADZONE;
+
+        // --- E. 安全检查与输出 ---
+        if (Turn_Off(roll) == 0) // 正常
+        {
+            ST = 0; // 电机使能
+            Set_Pwm(Moto1, Moto2);
+        }
+        else // 异常 (如解锁未就绪)
+        {
+            ST = 1;
+            Moto1 = 0; Moto2 = 0;
+            Set_Pwm(Moto1, Moto2);
+            Flag_Stop = 1;
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
+        }
+    }
+    else
+    {
+        // 停止或跌倒处理
+        Moto1 = 0; Moto2 = 0;
+        Set_Pwm(Moto1, Moto2);
+        ST = 1; // 失能
+        
+        // 重置 PID 状态
+        vel_integral = 0; smooth_target_vel = 0; estimated_speed = 0; last_vel_output = 0;
+        turn_integral = 0; smooth_turn_output = 0;
+        ang_e_k_1 = 0; ang_e_k_2 = 0;
+        pal_e_k_1 = 0; pal_e_k_2 = 0;
+        
+        // 重置校准状态
+        AutoZero_SumAngle = 0; AutoZero_Count = 0; AutoZero_InProgress = 0; start_delay = 0;
+        Flag_Zhongzhi = 0; 
+        
+        if(fall_down) {
+             ZeroRequirementMean = 1;
+             ZeroRequirementSpeedPid = 1;
+             HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET); // 报警
+        }
+    }
+
+    // 性能测试引脚翻转
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); 
+}
+
+/**
+ * @brief 核心 PID 计算函数 (移植参考项目算法)
+ */
+void Balance_PID_Calculate(int *p_balance_pwm, int *p_turn_pwm)
+{
+    float dt = CONTROL_DT;
+    float angle_err, gyro_err, vel_err;
+    float kp, ki, kd;
+    float output_ang, output_pal, output_vel, output_turn;
+    
+    // ================= 1. 速度环 (Velocity Loop) =================
+    // 目标：通过改变“目标角度”来控制速度
+    float raw_target_vel = 0;
+    if (Flag_Qian) raw_target_vel = (float)Target_Velocity;
+    else if (Flag_Hou) raw_target_vel = -(float)Target_Velocity;
+    
+    // 软启动 (Ramp)
+    if (raw_target_vel > smooth_target_vel) {
+        smooth_target_vel += VEL_RAMP_STEP;
+        if (smooth_target_vel > raw_target_vel) smooth_target_vel = raw_target_vel;
+    } else if (raw_target_vel < smooth_target_vel) {
+        smooth_target_vel -= VEL_RAMP_STEP;
+        if (smooth_target_vel < raw_target_vel) smooth_target_vel = raw_target_vel;
+    }
+    
+    // 死区停车
+    if (fabsf(smooth_target_vel) < 50.0f && fabsf(raw_target_vel) < 50.0f) {
+        smooth_target_vel = 0;
+        vel_integral = 0; estimated_speed = 0; last_vel_output = 0;
+        output_vel = 0;
+    } else {
+        // 估算速度 (开环模型：用上一轮输出模拟)
+        estimated_speed = estimated_speed * 0.92f + last_vel_output * 0.08f;
+        
+        vel_err = smooth_target_vel - estimated_speed;
+        
+        // PI 计算 (参考项目逻辑简化版)
+        kp = KP_VEL;
+        ki = KP_VEL * dt / TI_VEL;
+        // output = P*(e_k - e_k_1) + I*e_k + D*...
+        // 这里简化为经典 PI: P*e + I*integral
+        vel_integral += vel_err;
+        // 积分限幅
+        if (vel_integral > 5000) vel_integral = 5000;
+        if (vel_integral < -5000) vel_integral = -5000;
+        
+        output_vel = (vel_err * kp) + (vel_integral * ki);
+        last_vel_output = output_vel;
+    }
+    
+    // 速度环的输出作为“角度偏移量”叠加到平衡中值上
+    // 系数 0.05 需调试：速度误差越大，车身需要倾斜越多来加速
+    float target_angle = Zhongzhi + (output_vel * 0.05f); 
+
+    // ================= 2. 直立角度环 (Angle Loop) =================
+    // 输入：目标角度 (来自速度环) vs 实际角度 (pitch 或 roll，取决于安装)
+    // 假设你的车是前后平衡，用 pitch；如果是左右，用 roll。原代码用 -roll，这里保持一致
+    float current_angle = -roll; 
+    angle_err = target_angle - current_angle;
+    
+    kp = KP_ANG;
+    ki = KP_ANG * dt / TI_ANG;
+    kd = KP_ANG * TD_ANG / dt;
+    
+    // 位置式 PID
+    output_ang = kp * (angle_err - ang_e_k_1) + ki * angle_err + kd * (angle_err - 2*ang_e_k_1 + ang_e_k_2);
+    
+    ang_e_k_2 = ang_e_k_1;
+    ang_e_k_1 = angle_err;
+    
+    // 角度环的输出作为“目标角速度”传给内环
+    int target_gyro = (int)output_ang;
+
+    // ================= 3. 角速度环 (Gyro/Pal Loop) =================
+    // 输入：目标角速度 vs 实际角速度 (gyroy 或 gyrox)
+    // 原代码用 gyrox 对应 roll，这里保持一致
+    float current_gyro = (float)gyrox; 
+    gyro_err = (float)target_gyro - current_gyro;
+    
+    kp = KP_PAL;
+    ki = KP_PAL * dt / TI_PAL;
+    kd = KP_PAL * TD_PAL / dt;
+    
+    output_pal = kp * (gyro_err - pal_e_k_1) + ki * gyro_err + kd * (gyro_err - 2*pal_e_k_1 + pal_e_k_2);
+    
+    pal_e_k_2 = pal_e_k_1;
+    pal_e_k_1 = gyro_err;
+    
+    // 最终直立 PWM (加一个缩放系数)
+    int balance_out = (int)(output_pal * 0.8f);
+
+    // ================= 4. 转向环 (Turn Loop) =================
+    float raw_turn_target = 0;
+    if (Flag_Left) raw_turn_target = -TURN_GAIN;
+    else if (Flag_Right) raw_turn_target = TURN_GAIN;
+    
+    // 一阶低通滤波
+    smooth_turn_output = smooth_turn_output * (1.0f - TURN_FILTER_COEF) + raw_turn_target * TURN_FILTER_COEF;
+    
+    // 死区归零
+    if (raw_turn_target == 0 && fabsf(smooth_turn_output) < 5.0f) {
+        smooth_turn_output = 0;
+    }
+    
+    // 可选：加入陀螺仪反馈 (gyroz) 增加稳定性
+    // float turn_err = smooth_turn_output - (float)gyroz;
+    // 这里简化为直接输出滤波后的值，如需 PID 可展开
+    int turn_out = (int)smooth_turn_output;
+
+    // 输出结果
+    *p_balance_pwm = balance_out;
+    *p_turn_pwm = turn_out;
+}
+
+
+
+
+
+
+
+
+/**************************************************************************
+函数功能：控制主逻辑
+入口参数：无
+返回  值：无
+**************************************************************************/
+
+
+
+//void ControlLoopPackage()
+//{
+//    //pid计算频率越高越好，做到非常稳定的是达到1ms一次，1000Hz的频率，那么就不能用DMP来获取值了，只能自己解算姿态，芯片能不能达到计算的能力，后面可以试试看别的姿态解算方法，提高频率
+//	HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); //最后翻转PC13LED灯,示波器检查pid计算能否在1ms内完成
+//	
+//    static int last_Moto1 = 0, last_Moto2 = 0;
+
+//    last_Moto1 = Moto1;
+//    last_Moto2 = Moto2;
+//	
+//	
+//	
+//   
+//       
+//		MPU6050_Data_read();	//获取陀螺仪数据	每5ms读取一次
+//		Get_Elrs(); //===读取航模遥控器的数据
+//       
+
+
+//    
+//	//MPU_Get_Gyroscope(&gyrox,&gyroy,&gyroz);
+//	
+//    if ( click() == 1 )  //((Flag_Stop == 1) && (click() == 1) )
+//    {
+//        Flag_Stop = 0;
+//        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET); //黄色把警灯熄灭
+
+//    }
+
+
+//    if (Flag_Stop == 0)
+//    {
+
+//		MPU_Get_Gyroscope(&gyrox,&gyroy,&gyroz);	 //更新陀螺仪数据
+//		//printf("Gyro_y is %d \r\n", gyrox);
+//        Balance_Pwm = balance(-roll,gyrox); //===平衡控制 balanceValue = (int)(Balance_Kp * Bias + Balance_Kd * Gyro); //===计算平衡控制的电机PWM
+
+//        Velocity_Pwm = velocity(Moto1, Moto2);
+//        Turn_Pwm = turn(Moto1, Moto2); //===速度环PI控制	 速度反馈是正反馈，就是小车快的时候要慢下来就需要再跑快一点
+//       // 		Moto1 = Balance_Pwm;
+//        //	Moto2 = Balance_Pwm;
+//	
+//		 Moto1 = Balance_Pwm + Velocity_Pwm + Turn_Pwm; //===计算左轮电机最终PWM  通过第一章的推导，输出方程可以将串级PID的算法转化成为：一个单独的负反馈的直立环 + 一个单独的正反馈的速度环。Moto1=Balance_Pwm-Velocity_Pwm-Turn_Pwm; 这里究竟应该是用加号还是减号？
+//        Moto2 = Balance_Pwm + Velocity_Pwm - Turn_Pwm; //===计算右轮电机最终PWM 即脉冲/秒， 需要8000/s的脉冲频率才能达到2.5n/s, 150rpm
+//		 
+//		 
+//		
+////        Moto1 = Balance_Pwm + Velocity_Pwm - Turn_Pwm; //===计算左轮电机最终PWM  通过第一章的推导，输出方程可以将串级PID的算法转化成为：一个单独的负反馈的直立环 + 一个单独的正反馈的速度环。Moto1=Balance_Pwm-Velocity_Pwm-Turn_Pwm; 这里究竟应该是用加号还是减号？
+////        Moto2 = Balance_Pwm + Velocity_Pwm + Turn_Pwm; //===计算右轮电机最终PWM 即脉冲/秒， 需要8000/s的脉冲频率才能达到2.5n/s, 150rpm
+
+//        // printf("%d \r\n",Moto1);
+
+//        // *!步进电机的转速不能突然变化，加速度过大会导致失步和啸叫，电机失能，所以必须有一个控制输出值突变的手段
+
+//        Xianfu_Pwm(last_Moto1, last_Moto2); // 限幅只能限定最大最小值，并没有限定加速度;步进电机频率要到13kHZ，转速要达到250rpm，即4n/s的速度
+
+//        // printf("M1 is %d  \r\n", Moto1);
+
+//        /* Moto的值还要经过限幅和线性化，才能赋值给计时器输出pwm波
+
+//        void Xianfu_Pwm(void)
+//        {
+//            int Amplitude_H = 19000, Amplitude_L = -19000;   //经计算如果分频14，则需要最大值11834才能达到最大转速4n/s的速度，分频改成21的话，差不多8000 （原来是5000）
+//            if(Moto1 < Amplitude_L)  Moto1 = Amplitude_L;
+//            if(Moto1 > Amplitude_H)  Moto1 = Amplitude_H;
+//            if(Moto2 < Amplitude_L)  Moto2 = Amplitude_L;
+//            if(Moto2 > Amplitude_H)  Moto2 = Amplitude_H;
+//        }
+
+
+//        u16  Linear_Conversion(int moto)
+//        {
+//            u32 temp;
+//            u16 Linear_Moto;
+//            temp = 36000000 / (PRESCALER + 1) / 13000 * 5000 / myabs(moto);
+//            if(temp > 65535) Linear_Moto = 65535;
+//            else Linear_Moto = (u16)temp;
+//            if (temp < 80) Linear_Moto = 80; //最小脉冲个数值60个，比这更低马达功率的扭矩不够，转不起来
+//            else Linear_Moto = (u16)temp;
+//            return Linear_Moto;
+//        }
+
+
+//        }
+
+
+
+
+
+//        */
+
+//        //        if(Pick_Up(Acceleration_Z, Current_Angle, Moto1, Moto2) == 1)         //====检测小车被拿起，自动关闭电机
+//        //		{
+//        //			Flag_Stop = 1;
+//        //			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);//报警黄灯亮起
+//        //		}
+//        if (Turn_Off(roll) == 0) //===如果不存在异常
+//        {
+
+//            ST = 0;                // 电机使能
+
+//            Set_Pwm(Moto1, Moto2); //===赋值给PWM寄存器
+//            //				 Get_Zhongzhi	();
+//            // printf("Zhongzhi is %d \r\n", Zhongzhi);
+//        }
+//        else
+//        {
+//            ST = 1; // 电机失能
+//            Moto1 = 0;
+//            Moto2 = 0;
+//            Set_Pwm(Moto1, Moto2);
+
+
+//            Flag_Stop = 1;
+//            ZeroRequirementMean = 1;
+//            ZeroRequirementSpeedPid = 1;
+
+//            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);//报警黄灯亮起
+//            // printf("Failed, turn off!\r\n");
+//        }
+
+
+//        if (Flag_Zhongzhi == 0)
+//        {
+//            Get_Zhongzhi(); // 自动寻找平衡点
+//        }
+
+
+//    }
+
+//    // else  printf("Zhongzhi is %f \r\n", Zhongzhi);
+//    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); //最后翻转PC13LED灯，示波器可以从led引脚翻转频率看是否能保证1000hz的pid控制
+//}
+
+/**************************************************************************
+函数功能：限制PWM赋值
+入口参数：无
+返回  值：无
+**************************************************************************/
+void Xianfu_Pwm(int lastMoto1, int lastMoto2)
+{
+    //const int Maximum_delta_speed = 2000; // 800
+    /*限幅 */
+    int Amplitude_H = 13000, Amplitude_L = -13000; // 经计算13000可达4n/s,246rpm,此电机最大转速在5.2n/s, 312rpm左右。
+    if (Moto1 < Amplitude_L)
+        Moto1 = Amplitude_L;
+    if (Moto1 > Amplitude_H)
+        Moto1 = Amplitude_H;
+    if (Moto2 < Amplitude_L)
+        Moto2 = Amplitude_L;
+    if (Moto2 > Amplitude_H)
+        Moto2 = Amplitude_H;
+
+    /*限加速度*/
+
+//        if ((Moto1 - lastMoto1) > Maximum_delta_speed) // Maximum_delta_speed 值为2000,对应转速差别为0.339n/s,对应加速度为 0.339*200=6.8n/s2,因为计算的频率为每5ms一次
+//       {
+
+//            Moto1 = lastMoto1 + Maximum_delta_speed;
+//        }
+//        else if ((Moto1 - lastMoto1) < -Maximum_delta_speed)
+//        {
+//            Moto1 = lastMoto1 - Maximum_delta_speed;
+//        }
+
+//        if ((Moto2 - lastMoto2) > Maximum_delta_speed)
+//        {
+
+//            Moto2 = lastMoto2 + Maximum_delta_speed;
+//        }
+//        else if ((Moto2 - lastMoto2) < -Maximum_delta_speed)
+//        {
+//            Moto2 = lastMoto2 - Maximum_delta_speed;
+//        }
+
+    /*如果Moto值小于300，是否将Moto值置零？*/
+
+    // if (myabs(Moto1)<100) Moto1=0;
+    // if (myabs(Moto2)<100) Moto2=0;
+
+    // 不能用
+
+    //	if (myabs(Moto1 - lastMoto1) > Maximum_delta_speed) //Maximum_delta_speed 值为2000,对应转速差别为0.339n/s,对应加速度为 0.339*200=6.8n/s2,因为计算的频率为每5ms一次
+    //    {
+    //        if ((Moto1 - lastMoto1) > 0)
+    //        {
+    //            Moto1 = lastMoto1 + Maximum_delta_speed;
+    //        }
+    //        else
+    //        {
+    //            Moto1 = lastMoto1 - Maximum_delta_speed;
+
+    //        }
+
+    //    }
+
+    //    if (myabs(2 - lastMoto2) > Maximum_delta_speed)
+    //    {
+    //        if ((Moto2 - lastMoto2) > 0)
+    //        {
+    //            Moto2 = lastMoto2 + Maximum_delta_speed;
+    //        }
+    //        else
+    //        {
+    //            Moto2 = lastMoto2 - Maximum_delta_speed;
+
+    //        }
+
+    //    }
+}
+
+/**************************************************************************
+函数功能：自适应中值 (改进版：允许小幅摆动中校准)
+入口参数：无
+返回  值：无
+**************************************************************************/
+void Get_Zhongzhi(void)
+{
+    // 如果已经校准过，直接退出 (除非你想做实时动态校准，否则校准一次即可)
+    if (Flag_Zhongzhi == 1) return;
+
+    // 安全检测：如果车快倒了 (角度过大)，重置采样
+    if (fabs(roll) > 15.0f) 
+    {
+        AutoZero_SumAngle = 0;
+        AutoZero_Count = 0;
+        AutoZero_InProgress = 0;
+        return;
+    }
+
+    // 启动条件：
+    // 1. 电机已使能 (Flag_Stop == 0)
+    // 2. 角度在合理范围内 (-10度 到 10度)
+    // 3. 已经运行了一小段时间 (避免上电瞬间的瞬态干扰)，比如进入控制循环 100 次后
+    static int start_delay = 0;
+    if (Flag_Stop == 0) start_delay++;
+    
+    if (start_delay > 100 && fabs(roll) < 10.0f) 
+    {
+        AutoZero_InProgress = 1;
+    }
+
+    // 执行采样
+    if (AutoZero_InProgress == 1)
+    {
+        AutoZero_SumAngle += (-roll); // 累加当前角度 (注意符号，你的 balance 函数用的是 -roll)
+        AutoZero_Count++;
+
+        // 采样足够次数 (假设 1kHz 中断，采样 2000 次 = 2 秒)
+        // 2 秒内车会左右晃动几个周期，平均值即为机械中值
+        if (AutoZero_Count >= 1000) 
+        {
+            // 计算平均值
+            float new_zhongzhi = AutoZero_SumAngle / AutoZero_Count;
+            
+            // 【关键】平滑过渡：不要直接赋值，防止突变导致摔倒
+            // 如果新旧值差别不大，直接更新；如果差别大，分步更新或直接更新但配合低速启动
+            Zhongzhi = new_zhongzhi;
+            Flag_Zhongzhi = 1; // 标记校准完成
+            
+            // 提示用户
+            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14,GPIO_PIN_SET); // 亮红灯表示中值已经找到
+            printf("Zhongzhi Auto-Calibrated: %f (Samples: %d)\r\n", Zhongzhi, AutoZero_Count);
+            
+            // 重置采样状态
+            AutoZero_SumAngle = 0;
+            AutoZero_Count = 0;
+            AutoZero_InProgress = 0;
+        }
+    }
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+
+    // MPU_Flag=1;
+   
+	 ControlLoopPackage();
+}
+
+
+
+
+
+int map(int val, int I_Min, int I_Max, int O_Min, int O_Max)
+{
+  return (val - I_Min) * (O_Max - O_Min) / (I_Max - I_Min) + O_Min;
+}
+
+
