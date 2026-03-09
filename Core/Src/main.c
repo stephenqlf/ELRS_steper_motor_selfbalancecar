@@ -168,23 +168,16 @@ int main(void)
 
     delay_ms(2000);
 
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1); // 启动左电机通道
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2); // 启动右电机通道
-
-    // 初始设置为停止状态 (占空比 0)
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+     Motor_Init_System();
 
 
 
     HAL_TIM_Base_Start_IT(&htim2);  // <<< 启动 TIM2 更新中断！
 
 
-    //HAL_UART_Receive_DMA(&huart6, (uint8_t *)&receive_buff, 255);
+  
     HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
-    //Test Motor Rotation
-    //		Left_Direction=1;
-    //		Right_Direction=1;
+   
 
     CRSF_Init(&huart6);
 
@@ -197,14 +190,7 @@ int main(void)
     while (1)
     {
 
-        //		if(MPU_Flag ==1)
-        //		{
-        //
-        //			MPU_Flag=0;
-        //			ControlLoopPackage();
-        //
-        //
-        //		}
+        
 
         /* USER CODE END WHILE */
 
@@ -264,8 +250,8 @@ void SystemClock_Config(void)
 static void MX_NVIC_Init(void)
 {
     /* USART6_IRQn interrupt configuration */
-    HAL_NVIC_SetPriority(USART1_IRQn, 0, 0);
-    HAL_NVIC_EnableIRQ(USART1_IRQn);
+    HAL_NVIC_SetPriority(USART6_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(USART6_IRQn);
 }
 
 
