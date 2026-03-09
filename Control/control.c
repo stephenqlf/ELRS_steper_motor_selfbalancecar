@@ -21,9 +21,9 @@
 extern u8 Flag_Stop, ZeroRequirementSpeedPid, ZeroRequirementMean;
 extern float pitch, roll, yaw;
 extern short gyrox, gyroy, gyroz;
-extern u32 Arm_ch6;
+extern long Arm_ch6;
 extern int Voltage;
-extern float Remoter_Ch1, Remoter_Ch2;
+extern long Remoter_Ch1, Remoter_Ch2;
 extern u8 Flag_Qian, Flag_Hou, Flag_Left, Flag_Right, Flag_sudu;
 extern int Moto1, Moto2; // Final_Moto1/2 已不再需要
 extern int Target_Velocity;
@@ -94,7 +94,7 @@ void ControlLoopPackage()
 	
     // 2. 读取遥控
     Get_Elrs();
-    CRSF_Debug();
+   // CRSF_Debug();
 	
 	
     // 3. 按键
@@ -291,10 +291,10 @@ u8 click(void)
 void Get_Elrs()
 {
 
-    Remoter_Ch1 = map(CRSF_RX_packet.CH[1], CRSF_CHANNEL_VALUE_MIN, CRSF_CHANNEL_VALUE_MAX, -1000, 1000);
-    Remoter_Ch2 = map(CRSF_RX_packet.CH[3], CRSF_CHANNEL_VALUE_MIN, CRSF_CHANNEL_VALUE_MAX, -1000, 1000);
-    Arm_ch6 = map(CRSF_RX_packet.CH[5], CRSF_CHANNEL_VALUE_MIN, CRSF_CHANNEL_VALUE_MAX, -1000, 1000);
-    printf( "ch1 %d, ch2 %d ,arm ch6 is %d \r\n", Remoter_Ch1, Remoter_Ch2, Arm_ch6);
+    Remoter_Ch1 = (long) map(CRSF_RX_packet.CH[1], CRSF_CHANNEL_VALUE_MIN, CRSF_CHANNEL_VALUE_MAX, -1000, 1000);
+    Remoter_Ch2 =(long) map(CRSF_RX_packet.CH[3], CRSF_CHANNEL_VALUE_MIN, CRSF_CHANNEL_VALUE_MAX, -1000, 1000);
+    Arm_ch6 =(long) map(CRSF_RX_packet.CH[5], CRSF_CHANNEL_VALUE_MIN, CRSF_CHANNEL_VALUE_MAX, -1000, 1000);
+    //printf( "ch1 %ld, ch2 %ld ,arm ch6 is %ld \r\n", Remoter_Ch1, Remoter_Ch2, Arm_ch6);
 
     float a = atan2(Remoter_Ch1, Remoter_Ch2);
     float p = sqrt(pow(Remoter_Ch1, 2) + pow(Remoter_Ch2, 2));
@@ -341,12 +341,7 @@ void Get_Elrs()
 
 // Linear_Conversion 和 map 函数如果不再被外部调用（因为电机驱动逻辑移走了），也可以删除
 // 但为了保留代码完整性，暂时保留，虽然它们现在可能没被用到。
-u16 Linear_Conversion(int moto)
-{
-    if (moto == 0) return 65535;
-    u32 t = 100000000 / 100 / myabs(moto) / 2;
-    return (t > 65535) ? 65535 : (u16)t;
-}
+
 
 int map(int val, int I_Min, int I_Max, int O_Min, int O_Max)
 {

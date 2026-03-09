@@ -34,7 +34,7 @@
 
 
 int received_size = 0;
-int RxDoneFlag = 0; 
+int RxDoneFlag = 0;
 float currentLeanAngle = 0.0f;
 float currentOmega = 0.0;
 float verticleAngle = 0;
@@ -43,18 +43,18 @@ int MPU_Falg = 0;
 u8 mpu_dmp_flag = 0;  //陀螺仪初始化判断
 int i = 0;
 int flag = 1;
-u8 Way_Angle = 1 ;                           
-u8 Flag_Qian, Flag_Hou, Flag_Left, Flag_Right, Flag_sudu = 1; 
+u8 Way_Angle = 1 ;
+u8 Flag_Qian, Flag_Hou, Flag_Left, Flag_Right, Flag_sudu = 1;
 
-int Moto1 = 0, Moto2 = 0, Final_Moto1 = 0, Final_Moto2 = 0; 
-int Temperature;                            
-int Voltage;                               
+int Moto1 = 0, Moto2 = 0, Final_Moto1 = 0, Final_Moto2 = 0;
+int Temperature;
+int Voltage;
 
-float Show_Data_Mb = 0, Show_Data_Mb2 = 0;  
-u8 delay_50, delay_flag, Bi_zhang = 0, PID_Send, Flash_Send; 
-u32 Distance;                               
-float Acceleration_Z;                       
-long Remoter_Ch1 = 1500, Remoter_Ch2 = 1500, Arm_ch6 = 1500; 
+float Show_Data_Mb = 0, Show_Data_Mb2 = 0;
+u8 delay_50, delay_flag, Bi_zhang = 0, PID_Send, Flash_Send;
+u32 Distance;
+float Acceleration_Z;
+long Remoter_Ch1 = 1500, Remoter_Ch2 = 1500, Arm_ch6 = 1500;
 
 // 状态标志
 u8 Flag_Stop = 1;             // 初始为停止状态
@@ -62,7 +62,7 @@ u8 Flag_Zhongzhi = 0;         // 中值校准完成标志
 u8 ZeroRequirementMean = 0;   // 需要重置均值
 u8 ZeroRequirementSpeedPid = 0; // 需要重置速度 PID
 
-float Balance_Kp = 650, Balance_Kd =- 0.12, Velocity_Kp =-0.35,Velocity_Ki=-0.09; //PID????Balance_Kp=1500,Balance_Kd=-0.8,Velocity_Kp=20,,Velocity_Ki=Velocity_Kp/200, 500,-1.25, 42  Balance_Kd = -0.37,
+float Balance_Kp = 650, Balance_Kd = - 0.12, Velocity_Kp = -0.35, Velocity_Ki = -0.09; //PID????Balance_Kp=1500,Balance_Kd=-0.8,Velocity_Kp=20,,Velocity_Ki=Velocity_Kp/200, 500,-1.25, 42  Balance_Kd = -0.37,
 int Target_Velocity = 4000; // 默认速度快慢
 
 
@@ -145,51 +145,50 @@ int main(void)
     MX_GPIO_Init();
     MX_DMA_Init();
     MX_USART1_UART_Init();
-    
+
     MX_USART6_UART_Init();
-  
-	
-	MX_TIM1_Init();
-       MX_TIM2_Init();
+
+
+    MX_TIM1_Init();
+    MX_TIM2_Init();
     /* USER CODE BEGIN 2 */
-    delay_init(100); 
+    delay_init(100);
     MX_NVIC_Init();
 
 
-	  MPU6050_Init();					                           //初始化MPU6050
+    MPU6050_Init();					                           //初始化MPU6050
     mpu_dmp_flag = mpu_dmp_init();                 //初始化MPU6050的DMP
-    printf("MPU6050 DMP Initiate flag is %d \r\n", mpu_dmp_flag);	
+    printf("MPU6050 DMP Initiate flag is %d \r\n", mpu_dmp_flag);
 
 
 
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, GPIO_PIN_SET); 
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, GPIO_PIN_SET);
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
 
     delay_ms(2000);
-	
-	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1); // 启动左电机通道
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2); // 启动右电机通道
-  
-  // 初始设置为停止状态 (占空比 0)
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
-    
+
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1); // 启动左电机通道
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2); // 启动右电机通道
+
+    // 初始设置为停止状态 (占空比 0)
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
 
 
-HAL_TIM_Base_Start_IT(&htim2);  // <<< 启动 TIM2 更新中断！
- 
 
-    //HAL_UART_Receive_DMA(&huart6, (uint8_t *)&receive_buff, 255);  
+    HAL_TIM_Base_Start_IT(&htim2);  // <<< 启动 TIM2 更新中断！
+
+
+    //HAL_UART_Receive_DMA(&huart6, (uint8_t *)&receive_buff, 255);
     HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
     //Test Motor Rotation
     //		Left_Direction=1;
     //		Right_Direction=1;
-    
-	CRSF_Init(&huart6);
-//    HAL_UARTEx_ReceiveToIdle_DMA(&huart6, (uint8_t *)&receive_buff, 255);  
-//    __HAL_UART_ENABLE_IT(&huart6, UART_IT_IDLE); 
-	
+
+    CRSF_Init(&huart6);
+
+
 
     /* USER CODE END 2 */
 
@@ -210,22 +209,7 @@ HAL_TIM_Base_Start_IT(&htim2);  // <<< 启动 TIM2 更新中断！
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */
-
-        //Get_Zhongzhi	();
-        //testrun() 
-
-
-        //
-        //		Final_Moto1=300;
-        //		Final_Moto2=300;
-
-
-
-
-
-        //ControlLoopPackage();
-
-        //printf("come to end of while \r\n");
+        CRSF_Debug();
 
     }
     /* USER CODE END 3 */

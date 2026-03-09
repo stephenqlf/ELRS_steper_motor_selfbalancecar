@@ -287,7 +287,7 @@ void USART6_IRQHandler(void)
   HAL_UART_IRQHandler(&huart6);
   /* USER CODE BEGIN USART6_IRQn 1 */
 	CRSF_ProcessIdleIRQ();
-	//printf("enter into interupt !\r\n");
+	printf("enter into interupt !\r\n");
   //USER_UART_IRQHandler(&huart6); //з╪жи
   /* USER CODE END USART6_IRQn 1 */
 }
