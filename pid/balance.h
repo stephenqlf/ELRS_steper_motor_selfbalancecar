@@ -12,7 +12,7 @@ float Vel_Loop(int32_t speed, int32_t L, int32_t R, float dt);
 int32_t Ang_Loop(float target_ang,float measure_ang, float dt);
 
 // 角速度环: 目标角速度，时间间隔dt, 清零标志
-int32_t Pal_Loop(int32_t target_pal, int32_t measure_pal, float dt);
+int32_t Pal_Loop(int32_t target_pal, float measure_pal, float dt);
 
 // 转向环: 时间间隔dt, 清零标志 (目标值从全局变量 Omega_Turn 读取)
 int32_t Turn_Loop(float gyrozixl,float dt);

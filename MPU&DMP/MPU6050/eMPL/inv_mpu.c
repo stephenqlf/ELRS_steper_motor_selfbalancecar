@@ -2989,7 +2989,7 @@ u8 mpu_dmp_init(void)
 //yaw:航向角   精度:0.1°   范围:-180.0°<---> +180.0°
 //返回值:0,正常
 //    其他,失败
-u8 mpu_dmp_get_data(short *gyrox, short *gyroy, short *gyroz, float *pitch1,float *roll1,float *yaw1)
+u8 mpu_dmp_get_data(short *gyrox1, short *gyroy1, short *gyroz1, float *pitch1,float *roll1,float *yaw1)
 {
 	float q0=1.0f,q1=0.0f,q2=0.0f,q3=0.0f;
 	unsigned long sensor_timestamp;
@@ -3008,9 +3008,9 @@ u8 mpu_dmp_get_data(short *gyrox, short *gyroy, short *gyroz, float *pitch1,floa
 	 * The orientation is set by the scalar passed to dmp_set_orientation during initialization. 
 	**/
 	
-	*gyrox=gyro[0];
-	*gyroy=gyro[1];
-	*gyroz=gyro[2];
+	*gyrox1=gyro[0];
+	*gyroy1=gyro[1];
+	*gyroz1=gyro[2];
 	
 	
 	if(sensors&INV_WXYZ_QUAT) 

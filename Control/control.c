@@ -20,8 +20,8 @@
 /* ================= 全局变量声明 ================= */
 extern u8 Flag_Stop;
 extern float pitch, roll, yaw;
-extern  short gyrox, gyroy, gyroz;
-
+extern  short sgyrox, sgyroy, sgyroz;
+extern  float fgyrox, fgyroy, fgyroz;
 extern int Remoter_Ch1, Remoter_Ch2, Arm_ch6;
 extern u8 Flag_Qian, Flag_Hou, Flag_Left, Flag_Right, Flag_sudu;
 extern int Moto1, Moto2; 
@@ -78,8 +78,10 @@ void ControlLoopPackage()
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 
     // 1. 读取传感器 & 平滑
-    mpu_dmp_get_data(&gyrox, &gyroy, &gyroz, &pitch, &roll, &yaw);        //更新欧拉角数据
+    mpu_dmp_get_data(&sgyrox, &sgyroy, &sgyroz, &pitch, &roll, &yaw);        //更新欧拉角数据
     //MPU_Get_Gyroscope(&gyrox, &gyroy, &gyroz);	 //更新陀螺仪数据,这里读到的是原始16位short型数据，范围从-32,768 ~ 32,767， 这正确吗？陀螺仪数据不应该是度/秒才对吗，要检查一下参考程序是取的什么值，另外这个值要转化的话，应该还与量程有关，这个值大小与kp的取值大小密切相关陀螺仪传感器,±2000dps
+	fgyrox=sgyrox/16.4f;
+	fgyroz=sgyroz/16.4f;
 	
 	
 //	// 假设 gyrox 是读出来的 short 类型原始数据 (范围 -32768 ~ 32767)
@@ -100,11 +102,11 @@ void ControlLoopPackage()
     roll_1 = roll;
     roll = tmp_roll;
 
-    float tmp_gyro = ((float)gyrox + gyro_1 + gyro_2) / 3.0f;
+    float tmp_gyro = (fgyrox + gyro_1 + gyro_2) / 3.0f;
     gyro_2 = gyro_1;
-    gyro_1 = (float)gyrox;
-    gyrox = (short)tmp_gyro;
-    printf("roll is %f, gyrox is %d \r\n", roll, gyrox);
+    gyro_1 = fgyrox;
+    fgyrox = tmp_gyro;
+    printf("roll is %f, fgyrox is %f \r\n", roll, fgyrox);
 	
     // 2. 读取遥控器数据
     Get_Elrs();
@@ -164,7 +166,8 @@ void ControlLoopPackage()
             target_pal += Ang_Loop(target_ang, roll, DT_400HZ);
         }
 		//800hz
-        pwm_pal  += Pal_Loop(0, gyrox, DT_800HZ);
+		printf("old pwm_L is %d  \r\n", pwm_pal);
+        pwm_pal  += Pal_Loop(0, fgyrox, DT_800HZ);
 
         //pwm_pal = Pal_Loop(target_pal, gyrox, DT_800HZ);
 
@@ -173,14 +176,14 @@ void ControlLoopPackage()
         if (++turn_cnt >= 4)
         {
             turn_cnt = 0;
-            pwm_turn = Turn_Loop(gyroz, DT_200HZ);
+            pwm_turn = Turn_Loop(fgyroz, DT_200HZ);
         }
 
 
         // --- 合成输出 ---
         int32_t pwm_L = pwm_pal ;
         int32_t pwm_R = pwm_pal ;
-       //printf("pwm_L is %d  \r\n", pwm_pal);
+       printf("pwm_L is %d  \r\n", pwm_pal);
 
         //		int32_t pwm_L = pwm_pal + pwm_turn;
         //        int32_t pwm_R = pwm_pal - pwm_turn;
@@ -201,7 +204,7 @@ void ControlLoopPackage()
 
         Moto1 = pwm_L;
         Moto2 = pwm_R;
-       // printf("M1 is %d  \r\n", Moto1);
+        
         // --- 执行驱动 (关键修改) ---
         // 不再使用 Set_Pwm 和 ST 变量，直接调用新函数
         if (Turn_Off(roll) == 0)
@@ -235,6 +238,11 @@ void ControlLoopPackage()
         vel_cnt = 0;
         ang_cnt = 0;
         turn_cnt = 0;
+		Vel_Loop(0, Moto1, Moto2, DT_400HZ);
+		Ang_Loop(0, roll, DT_400HZ);
+		Pal_Loop(0, fgyrox, DT_800HZ);
+		Turn_Loop(fgyroz, DT_200HZ);
+		
     }
 
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);

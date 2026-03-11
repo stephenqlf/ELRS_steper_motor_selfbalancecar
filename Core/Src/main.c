@@ -56,11 +56,13 @@ float Zhongzhi = 2.0f;
 float pitch = 0.0f;
 float roll = 0.0f;
 float yaw = 0.0f;
-short gyrox = 0;
-short gyroy = 0;
-short gyroz = 0;
+short sgyrox = 0;
+short sgyroy = 0;
+short sgyroz = 0;
 
-
+float fgyrox = 0;
+float fgyroy = 0;
+float fgyroz = 0;
 
 static void MX_NVIC_Init(void);
 /* USER CODE END Includes */

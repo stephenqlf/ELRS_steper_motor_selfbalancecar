@@ -29,10 +29,11 @@ extern int32_t Omega_Turn;   // 目标转向角速度
 #define Td_Ang      (0.0f)     
 
 // 角速度环 (800Hz 逻辑)
-#define Kp_Pal      (-2.85f)    // 示例: -2.85
-#define Ti_Pal      (0.385f)     // 示例: 0.385
+#define Kp_Pal      (-20.0f)    // 示例: -2.85
+#define Ti_Pal      (1000.0f)     // 示例: 0.385
 #define Td_Pal      (0.0f)     
-
+//    Ki = Kp_Pal * dt / Ti_Pal;
+//    Kd = Kp_Pal * Td_Pal / dt;
 // 转向环 (200Hz 逻辑)
 #define Kp_Turn     (-0.8f)    // 示例: -0.365
 #define Ti_Turn     (400.0f)   // 示例: 520
@@ -128,7 +129,7 @@ int32_t Ang_Loop(float target_ang,float measure_ang, float dt)
 /**
  * @brief 角速度环
  */
-int32_t Pal_Loop(int32_t target_pal, int32_t measure_pal, float dt )
+int32_t Pal_Loop(int32_t target_pal, float measure_pal, float dt )
 {
     float e_k, output;
     float Ki, Kd;
@@ -145,7 +146,7 @@ int32_t Pal_Loop(int32_t target_pal, int32_t measure_pal, float dt )
     // 根据之前代码逻辑：current_angle = -roll, 所以这里应该用 gyrox
    
     
-    e_k = (float)target_pal - (float)measure_pal;
+    e_k = (float)target_pal - measure_pal;
 
     Ki = Kp_Pal * dt / Ti_Pal;
     Kd = Kp_Pal * Td_Pal / dt;
