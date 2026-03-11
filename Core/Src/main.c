@@ -31,38 +31,21 @@
 
 #include "crsf_parse.h"
 
-
-
-int received_size = 0;
-int RxDoneFlag = 0;
-float currentLeanAngle = 0.0f;
-float currentOmega = 0.0;
-float verticleAngle = 0;
-int MPU_Falg = 0;
-
 u8 mpu_dmp_flag = 0;  //陀螺仪初始化判断
-int i = 0;
-int flag = 1;
-u8 Way_Angle = 1 ;
+
+
 u8 Flag_Qian, Flag_Hou, Flag_Left, Flag_Right, Flag_sudu = 1;
 
-int Moto1 = 0, Moto2 = 0, Final_Moto1 = 0, Final_Moto2 = 0;
-int Temperature;
-int Voltage;
+int Moto1 = 0, Moto2 = 0;
 
-float Show_Data_Mb = 0, Show_Data_Mb2 = 0;
-u8 delay_50, delay_flag, Bi_zhang = 0, PID_Send, Flash_Send;
-u32 Distance;
-float Acceleration_Z;
-long Remoter_Ch1 = 1500, Remoter_Ch2 = 1500, Arm_ch6 = 1500;
+int Remoter_Ch1 = 1500, Remoter_Ch2 = 1500, Arm_ch6 = 1500;
 
 // 状态标志
 u8 Flag_Stop = 1;             // 初始为停止状态
 u8 Flag_Zhongzhi = 0;         // 中值校准完成标志
-u8 ZeroRequirementMean = 0;   // 需要重置均值
-u8 ZeroRequirementSpeedPid = 0; // 需要重置速度 PID
 
-float Balance_Kp = 650, Balance_Kd = - 0.12, Velocity_Kp = -0.35, Velocity_Ki = -0.09; //PID????Balance_Kp=1500,Balance_Kd=-0.8,Velocity_Kp=20,,Velocity_Ki=Velocity_Kp/200, 500,-1.25, 42  Balance_Kd = -0.37,
+
+
 int Target_Velocity = 4000; // 默认速度快慢
 
 
@@ -77,9 +60,8 @@ short gyrox = 0;
 short gyroy = 0;
 short gyroz = 0;
 
-int Balance_Pwm, Velocity_Pwm, Turn_Pwm;
-int MPU_Flag;
-void	testrun(void);
+
+
 static void MX_NVIC_Init(void);
 /* USER CODE END Includes */
 
