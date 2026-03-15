@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F411xE</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../CRSF;../Users;../MDK-ARM;../MOTOR;../Control;..\MPU&amp;DMP;..\MPU&amp;DMP\MPU_INT;..\MPU&amp;DMP\MPU6050;..\MPU&amp;DMP\MPU6050\eMPL;..\pid</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../CRSF;../Users;../MDK-ARM;../MOTOR;../Control;..\MPU&amp;DMP;..\MPU&amp;DMP\MPU_INT;..\MPU&amp;DMP\MPU6050;..\MPU&amp;DMP\MPU6050\eMPL;..\pid;..\mahony</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -1704,6 +1704,21 @@
               <FileName>balance.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\pid\balance.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>mahony</GroupName>
+          <Files>
+            <File>
+              <FileName>IMU_Pose_Estimation.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\mahony\IMU_Pose_Estimation.c</FilePath>
+            </File>
+            <File>
+              <FileName>IMU_Pose_Estimation.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\mahony\IMU_Pose_Estimation.h</FilePath>
             </File>
           </Files>
         </Group>

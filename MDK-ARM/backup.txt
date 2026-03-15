@@ -962,3 +962,345 @@ int map(int val, int I_Min, int I_Max, int O_Min, int O_Max)
 }
 
 
+3/13/2026
+/* control.c */
+#include "math.h"
+#include "stdio.h"
+#include "string.h"
+#include "usart.h"
+#include "stm32f4xx.h"
+#include "oldtype.h"
+#include "motor.h"
+#include "control.h"
+#include "MPU6050.h"
+#include "printf.h"
+#include "crsf_parse.h"
+#include "balance.h"
+#include "IMU_Pose_Estimation.h"
+
+/* ================= 配置区域 ================= */
+#define MAX_MOTO        (13000)
+#define MOTO_DEADZONE   (100)       // 【重要】改回 100，防止零点抖动烧毁驱动
+#define CRSF_CHANNEL_VALUE_MIN  172
+#define CRSF_CHANNEL_VALUE_MAX  1811
+
+/* ================= 全局变量声明 ================= */
+extern u8 Flag_Stop;
+extern float pitch, roll, yaw;
+
+extern  short gyrox, gyroy, gyroz;
+extern float fgyrox, fgyroy, fgyroz;
+extern int Remoter_Ch1, Remoter_Ch2, Arm_ch6;
+extern u8 Flag_Qian, Flag_Hou, Flag_Left, Flag_Right, Flag_sudu;
+extern int Moto1, Moto2; 
+extern int Target_Velocity;
+
+extern u8 mpu_dmp_flag;
+extern float Zhongzhi;
+extern u8 Flag_Zhongzhi;
+
+// 【新增】模仿示例程序的全局变量
+int32_t Speed_Trim = 0;
+int32_t Turn_Trim = 0;
+int32_t Omega_Turn = 0;
+
+u8 mpu6050_data_flag;
+float AutoZero_SumAngle = 0.0f;
+int AutoZero_Count = 0;
+u8 AutoZero_InProgress = 0;
+static int start_delay_cnt = 0;
+
+const float Math_PI = 3.1415926;
+
+/* ================= 中断级静态变量 ================= */
+static uint8_t vel_cnt = 0;
+static uint8_t ang_cnt = 0;
+static uint8_t turn_cnt = 0;
+
+static float target_ang = 0.0f;
+static int32_t target_pal = 0;
+static int32_t pwm_pal = 0;
+static int32_t pwm_turn = 0;
+
+#define DT_800HZ  (0.00125f)
+#define DT_400HZ  (0.00250f)
+#define DT_200HZ  (0.00500f)
+
+/* ================= 函数声明 ================= */
+void Auto_Calibrate_Zhongzhi(void);
+int myabs(int a);
+void Get_Elrs(void);
+u8 click(void);
+u8 Turn_Off(float angle);
+u16 Linear_Conversion(int moto);
+int map(int val, int I_Min, int I_Max, int O_Min, int O_Max);
+
+/* ================= 主控制循环 (800Hz) ================= */
+void ControlLoopPackage()
+{
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+
+    // 1. 读取传感器 & 平滑
+    IMU_Update_Handler(); // IMU 更新
+    
+    // 获取当前姿态和角速度
+    roll = Current_Attitude.roll;
+    fgyrox = Current_Attitude.gyro_x;
+    // fgyroy = Current_Attitude.gyro_y; // 如果需要
+    // fgyroz = Current_Attitude.gyro_z; // 如果需要
+
+    // 2. 读取遥控器数据
+    Get_Elrs();
+
+    // 3. 启动自平衡按键
+    if (click() == 1)
+    {
+        Flag_Stop = 0;
+        Balance_Init(); // PID 数据累积项清零
+        
+        // 重置所有中间变量
+        target_ang = Zhongzhi; // 初始目标角度设为中值
+        target_pal = 0;
+        pwm_pal = 0;
+        pwm_turn = 0;
+        
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET); // 绿灯亮
+    }
+
+    if (Flag_Stop == 0)
+    {
+        Auto_Calibrate_Zhongzhi();
+
+        // --- 准备输入 ---
+        int32_t speed_cmd = 0;
+        if (Flag_Qian) speed_cmd = Target_Velocity;
+        else if (Flag_Hou) speed_cmd = -Target_Velocity;
+
+        if (Flag_Left) Omega_Turn = -400;
+        else if (Flag_Right) Omega_Turn = 400;
+        else Omega_Turn = 0;
+
+        // --- PID 计算 (位置式：全部使用 = 赋值) ---
+
+        // 1. 速度环 (400Hz) -> 输出：角度偏移量
+        if (++vel_cnt >= 2)
+        {
+            vel_cnt = 0;
+            // 【修改】直接计算目标角度 = 中值 + 速度环输出的偏移量
+            float vel_offset = Vel_Loop(speed_cmd, Moto1, Moto2, DT_400HZ);
+            target_ang = Zhongzhi + vel_offset;
+
+            // 限幅：防止目标角度偏离中值太远
+            if (target_ang > Zhongzhi + 20.0f) target_ang = Zhongzhi + 20.0f;
+            if (target_ang < Zhongzhi - 20.0f) target_ang = Zhongzhi - 20.0f;
+        }
+
+        // 2. 角度环 (400Hz) -> 输出：目标角速度
+        if (++ang_cnt >= 2)
+        {
+            ang_cnt = 0;
+            // 【修改】直接计算目标角速度，不再累加
+            target_pal = Ang_Loop(target_ang, roll, DT_400HZ);
+            
+            // 限幅：防止目标角速度过大导致电机失控
+            if (target_pal > 500) target_pal = 500;
+            if (target_pal < -500) target_pal = -500;
+        }
+
+        // 3. 角速度环 (800Hz) -> 输出：PWM (直立核心)
+        // 【修改】直接计算 PWM，传入目标角速度 target_pal
+        pwm_pal = Pal_Loop(target_pal, fgyrox, DT_800HZ);
+
+        // 4. 转向环 (200Hz) -> 输出：PWM 差值
+        if (++turn_cnt >= 4)
+        {
+            turn_cnt = 0;
+            // 传入目标转向角速度 Omega_Turn 和 实际测量值 fgyroz
+            pwm_turn = Turn_Loop(fgyroz, DT_200HZ); 
+            // 注意：Turn_Loop 内部已经使用了全局变量 Omega_Turn
+        }
+
+        // --- 合成输出 ---
+        int32_t pwm_L = pwm_pal + pwm_turn;
+        int32_t pwm_R = pwm_pal - pwm_turn;
+
+        // --- 安全限幅 (第一道防线) ---
+        if (pwm_L > MAX_MOTO) pwm_L = MAX_MOTO;
+        if (pwm_L < -MAX_MOTO) pwm_L = -MAX_MOTO;
+        if (pwm_R > MAX_MOTO) pwm_R = MAX_MOTO;
+        if (pwm_R < -MAX_MOTO) pwm_R = -MAX_MOTO;
+
+        // --- 死区处理 (第二道防线) ---
+        // 如果绝对值小于死区，强制归零或跳到死区边界，防止电机在零点附近震荡
+        if (myabs(pwm_L) < MOTO_DEADZONE) 
+            pwm_L = 0; // 或者 (pwm_L > 0) ? MOTO_DEADZONE : -MOTO_DEADZONE; 建议先归零测试
+        if (myabs(pwm_R) < MOTO_DEADZONE) 
+            pwm_R = 0;
+
+        Moto1 = pwm_L;
+        Moto2 = pwm_R;
+        
+        // --- 执行驱动 ---
+        if (Turn_Off(roll) == 0)
+        {
+            // 正常运行
+            Motor_Refresh_Drive(Moto1, Moto2);
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET); // 绿灯
+            ST = 0; // 电机使能
+        }
+        else
+        {
+            // 保护停止 (角度过大或遥控器未解锁)
+            ST = 1; // 电机失能
+            Motor_Refresh_Drive(0, 0);
+            Flag_Stop = 1;
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET); // 红灯/黄灯
+        }
+    }
+    else
+    {
+        // 已停止状态
+        Motor_Refresh_Drive(0, 0);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
+
+        // 重置 PID 状态 (防止下次启动时有残留值)
+        Balance_Init();
+        target_ang = Zhongzhi;
+        target_pal = 0;
+        pwm_pal = 0;
+        pwm_turn = 0;
+        vel_cnt = 0;
+        ang_cnt = 0;
+        turn_cnt = 0;
+        
+        // 调用一次以初始化内部误差变量 (可选，Balance_Init 已做大部分工作)
+        Vel_Loop(0, 0, 0, DT_400HZ);
+        Ang_Loop(Zhongzhi, roll, DT_400HZ);
+        Pal_Loop(0, fgyrox, DT_800HZ);
+        Turn_Loop(fgyroz, DT_200HZ);
+    }
+
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+}
+
+/* ================= 辅助函数实现 ================= */
+
+void Auto_Calibrate_Zhongzhi(void)
+{
+    if (Flag_Zhongzhi == 1) return;
+    
+    // 如果倾斜角度过大，重置校准
+    if (fabsf(roll) > 15.0f)
+    {
+        AutoZero_SumAngle = 0;
+        AutoZero_Count = 0;
+        AutoZero_InProgress = 0;
+        start_delay_cnt = 0;
+        return;
+    }
+
+    if (Flag_Stop == 0) start_delay_cnt++;
+    
+    // 延迟启动校准，确保车已经放稳
+    if (start_delay_cnt > 400 && fabsf(roll) < 10.0f) 
+        AutoZero_InProgress = 1;
+        
+    if (AutoZero_InProgress)
+    {
+        AutoZero_SumAngle += roll;
+        AutoZero_Count++;
+        if (AutoZero_Count >= 2000) // 采集约 2.5 秒 (800Hz * 2000 / 400Hz 实际频率?) 
+                                    // 注意：此函数在 800Hz 循环中被调用，但受 Flag_Stop 控制
+        {
+            Zhongzhi = AutoZero_SumAngle / AutoZero_Count;
+            Flag_Zhongzhi = 1;
+            AutoZero_SumAngle = 0;
+            AutoZero_Count = 0;
+            AutoZero_InProgress = 0;
+            printf("Zhongzhi Calibrated: %f\r\n", Zhongzhi);
+        }
+    }
+}
+
+u8 Turn_Off(float angle)
+{
+    u8 temp;
+    // 解锁条件：通道 6 在中间 (800~1400)，且角度小于 20 度
+    if(Arm_ch6 > 800 && Arm_ch6 < 1400 && fabsf(angle) < 20.0f)
+    {
+        temp = 0;
+    }
+    else
+    {
+        temp = 1;
+        // 调试信息，仅在状态改变时打印更好，这里简化处理
+        // printf("Lock: Arm=%d, Angle=%.1f\r\n", Arm_ch6, angle);
+    }
+    return temp;
+}
+
+u8 click(void)
+{
+    static u8 k = 1;
+    // 假设 KEY 低电平有效
+    if(k && KEY == 0)
+    {
+        k = 0;
+        return 1; // 检测到按下
+    }
+    if(KEY) k = 1; // 松开
+    return 0;
+}
+
+void Get_Elrs()
+{
+    Remoter_Ch1 =  map(CRSF_RX_packet.CH[1], CRSF_CHANNEL_VALUE_MIN, CRSF_CHANNEL_VALUE_MAX, -1000, 1000);
+    Remoter_Ch2 = map(CRSF_RX_packet.CH[3], CRSF_CHANNEL_VALUE_MIN, CRSF_CHANNEL_VALUE_MAX, -1000, 1000);
+    Arm_ch6 = map(CRSF_RX_packet.CH[5], CRSF_CHANNEL_VALUE_MIN, CRSF_CHANNEL_VALUE_MAX, -1000, 1000);
+
+    float a = atan2((float)Remoter_Ch1, (float)Remoter_Ch2);
+    float p = sqrt(pow((float)Remoter_Ch1, 2) + pow((float)Remoter_Ch2, 2));
+
+    if (p > 200) // 死区，防止误触
+    {
+        if (a > Math_PI / 4 && a <= Math_PI * 3 / 4)
+        {
+            Flag_Qian = 1; Flag_Hou = 0; Flag_Left = 0; Flag_Right = 0;
+        }
+        else if (a > -Math_PI * 3 / 4 && a <= -Math_PI / 4)
+        {
+            Flag_Qian = 0; Flag_Hou = 1; Flag_Left = 0; Flag_Right = 0;
+        }
+        else if (a > -Math_PI / 4 && a <= Math_PI / 4)
+        {
+            Flag_Left = 0; Flag_Right = 1; Flag_Qian = 0; Flag_Hou = 0;
+        }
+        else
+        {
+            Flag_Left = 1; Flag_Right = 0; Flag_Qian = 0; Flag_Hou = 0;
+        }
+    }
+    else
+    {
+        Flag_Left = 0; Flag_Right = 0; Flag_Qian = 0; Flag_Hou = 0;
+    }
+}
+
+int map(int val, int I_Min, int I_Max, int O_Min, int O_Max)
+{
+    if (I_Max == I_Min) return O_Min; // 防止除零
+    return (int)((val - I_Min) * (O_Max - O_Min) / (I_Max - I_Min) + O_Min);
+}
+
+int myabs(int a)
+{
+    return (a < 0) ? -a : a;
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM2)
+    {
+        ControlLoopPackage();
+    }
+}
